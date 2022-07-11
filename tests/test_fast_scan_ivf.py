@@ -295,8 +295,8 @@ class TestIVFImplem12(unittest.TestCase):
 
     IMPLEM = 12
 
-    def do_test(self, by_residual, metric=faiss.METRIC_L2, d=32):
-        ds = datasets.SyntheticDataset(d, 2000, 5000, 200)
+    def do_test(self, by_residual, metric=faiss.METRIC_L2, d=32, nq=200):
+        ds = datasets.SyntheticDataset(d, 2000, 5000, nq)
 
         index = faiss.index_factory(d, f"IVF32,PQ{d//2}x4np", metric)
         # force coarse quantizer
@@ -347,6 +347,27 @@ class TestIVFImplem12(unittest.TestCase):
     def test_by_residual_odd_dim(self):
         self.do_test(True, d=30)
 
+    def test_no_residual_single_query(self):
+        self.do_test(False, nq=1)
+
+    def test_by_residual_single_query(self):
+        self.do_test(True, nq=1)
+
+    def test_no_residual_ip_single_query(self):
+        self.do_test(False, metric=faiss.METRIC_INNER_PRODUCT, nq=1)
+
+    def test_by_residual_ip_single_query(self):
+        self.do_test(True, metric=faiss.METRIC_INNER_PRODUCT, nq=1)
+
+    def test_no_residual_odd_dim_single_query(self):
+        self.do_test(False, d=30, nq=1)
+
+    def test_by_residual_odd_dim_single_query(self):
+        self.do_test(True, d=30, nq=1)
+
+
+
+
 
 class TestIVFImplem10(TestIVFImplem12):
     IMPLEM = 10
@@ -357,6 +378,12 @@ class TestIVFImplem11(TestIVFImplem12):
 
 class TestIVFImplem13(TestIVFImplem12):
     IMPLEM = 13
+
+class TestIVFImplem14(TestIVFImplem12):
+    IMPLEM = 14
+
+class TestIVFImplem15(TestIVFImplem12):
+    IMPLEM = 15
 
 
 class TestAdd(unittest.TestCase):

@@ -163,6 +163,17 @@ struct IndexIVFPQFastScan : IndexIVF {
             int impl,
             size_t* ndis_out,
             size_t* nlist_out) const;
+
+    // implem 14 is mukltithreaded internally across nprobes and queries
+    template <class C>
+    void search_implem_14(
+            idx_t n,
+            const float* x,
+            idx_t k,
+            float* distances,
+            idx_t* labels,
+            int impl) const;
+
 };
 
 struct IVFFastScanStats {
