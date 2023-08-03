@@ -903,6 +903,7 @@ Index* read_index(IOReader* f, int io_flags) {
         idxrf->base_index = read_index(f, io_flags);
         idxrf->refine_index = read_index(f, io_flags);
         READ1(idxrf->k_factor);
+        READ1(idxrf->implem);
         if (dynamic_cast<IndexFlat*>(idxrf->refine_index)) {
             // then make a RefineFlat with it
             IndexRefine* idxrf_old = idxrf;

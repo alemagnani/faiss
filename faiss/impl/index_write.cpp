@@ -745,6 +745,7 @@ void write_index(const Index* idx, IOWriter* f) {
         write_index(idxrf->base_index, f);
         write_index(idxrf->refine_index, f);
         WRITE1(idxrf->k_factor);
+        WRITE1(idxrf->implem);
     } else if (
             const IndexIDMap* idxmap = dynamic_cast<const IndexIDMap*>(idx)) {
         uint32_t h = dynamic_cast<const IndexIDMap2*>(idx) ? fourcc("IxM2")

@@ -781,26 +781,30 @@ class TestRefine(unittest.TestCase):
         # add refine index on top
         index_flat = faiss.IndexFlat(d, metric)
         index_flat.add(xb)
+        for threads in [1,4]:
 
-        index2 = faiss.IndexRefine(index1, index_flat)
-        index2.k_factor = 10.0
-        D2, I2 = index2.search(xq, 10)
+            faiss.omp_set_num_threads(threads)
+            for implem in [0, 1]:
+                index2 = faiss.IndexRefine(index1, index_flat)
+                index2.implem = implem
+                index2.k_factor = 10.0
+                D2, I2 = index2.search(xq, 10)
 
-        # check distance is computed properly
-        for i in range(len(xq)):
-            x1 = xq[i]
-            x2 = xb[I2[i, 5]]
-            if metric == faiss.METRIC_L2:
-                dref = ((x1 - x2) ** 2).sum()
-            else:
-                dref = np.dot(x1, x2)
-            np.testing.assert_almost_equal(dref, D2[i, 5], decimal=5)
+                # check distance is computed properly
+                for i in range(len(xq)):
+                    x1 = xq[i]
+                    x2 = xb[I2[i, 5]]
+                    if metric == faiss.METRIC_L2:
+                        dref = ((x1 - x2) ** 2).sum()
+                    else:
+                        dref = np.dot(x1, x2)
+                    np.testing.assert_almost_equal(dref, D2[i, 5], decimal=5)
 
-        # check that with refinement, the recall@10 is the same as
-        # the original recall@100
-        recall2 = (I2 == Iref[:, :1]).sum()
-        # print("recalls", recall1, recall2)
-        self.assertEqual(recall1, recall2)
+                # check that with refinement, the recall@10 is the same as
+                # the original recall@100
+                recall2 = (I2 == Iref[:, :1]).sum()
+                # print("recalls", recall1, recall2)
+                self.assertEqual(recall1, recall2)
 
     def test_IP(self):
         self.do_test(faiss.METRIC_INNER_PRODUCT)

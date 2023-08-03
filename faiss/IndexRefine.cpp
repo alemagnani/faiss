@@ -107,6 +107,8 @@ void IndexRefine::search(
     ScopeDeleter<idx_t> del1;
     ScopeDeleter<float> del2;
 
+    idx_t kfact = k_factor;
+
     if (k != k_base) {
         base_labels = new idx_t[n * k_base];
         del1.set(base_labels);
@@ -118,26 +120,48 @@ void IndexRefine::search(
 
     for (int i = 0; i < n * k_base; i++)
         assert(base_labels[i] >= -1 && base_labels[i] < ntotal);
-
+    FAISS_THROW_IF_NOT( implem == 0 || implem == 1 );
+    if ( implem == 0) {
         // parallelize over queries
 #pragma omp parallel if (n > 1)
-    {
-        std::unique_ptr<DistanceComputer> dc(
-                refine_index->get_distance_computer());
+        {
+            std::unique_ptr<DistanceComputer> dc(
+                    refine_index->get_distance_computer());
 #pragma omp for
-        for (idx_t i = 0; i < n; i++) {
-            dc->set_query(x + i * d);
-            idx_t ij = i * k_base;
-            for (idx_t j = 0; j < k_base; j++) {
-                idx_t idx = base_labels[ij];
-                if (idx < 0)
-                    break;
-                base_distances[ij] = (*dc)(idx);
-                ij++;
+            for (idx_t i = 0; i < n; i++) {
+                dc->set_query(x + i * d);
+                idx_t ij = i * k_base;
+                for (idx_t j = 0; j < k_base; j++) {
+                    idx_t idx = base_labels[ij];
+                    //break;
+                    if (idx < 0)
+                        break;
+                    base_distances[ij] = (*dc)(idx);
+                    ij++;
+                }
+            }
+        }
+    } else if (implem == 1) {
+           for (idx_t i = 0; i < n; i++) {
+#pragma omp parallel if (kfact > 1)
+        {
+            std::unique_ptr<DistanceComputer> dc(
+                    refine_index->get_distance_computer());
+
+                dc->set_query(x + i * d);
+#pragma omp for
+            for (idx_t loop = 0; loop < kfact; loop++) {
+                idx_t start = i * k_base + k * loop;
+                for (idx_t j = start; j < k + start; j++) {
+                    idx_t idx = base_labels[j];
+                    if (idx < 0)
+                        break;
+                    base_distances[j] = (*dc)(idx);
+                }
+            }
             }
         }
     }
-
     // sort and store result
     if (metric_type == METRIC_L2) {
         typedef CMax<float, idx_t> C;

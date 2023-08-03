@@ -28,6 +28,9 @@ struct IndexRefine : Index {
     /// the base_index (should be >= 1)
     float k_factor = 1;
 
+    // to switch between implementation. Implementation 1 uses threads for single query requests
+    int implem = 0;
+
     /// initialize from empty index
     IndexRefine(Index* base_index, Index* refine_index);
 

@@ -354,6 +354,14 @@ void IndexIVFFastScan::search_dispatch_implem(
     // actual implementation used
     int impl = implem;
 
+    if ( impl == 14 || impl  == 15 ) {
+        if ( n >= 10) {
+            impl = 0;
+        } else if ( k > 20) {
+            impl = 15;
+        }
+    }
+
     if (impl == 0) {
         if (bbs == 32) {
             impl = 12;
@@ -421,7 +429,7 @@ void IndexIVFFastScan::search_dispatch_implem(
                 nslice = omp_get_max_threads();
             }
             if (impl == 14 ||
-                impl == 15) { // this might require slicing if there are too
+               impl == 15) { // this might require slicing if there are too
                               // many queries (for now we keep this simple)
                 search_implem_14<C>(n, x, k, distances, labels, impl, scaler);
             } else {

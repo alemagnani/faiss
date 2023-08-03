@@ -19,14 +19,16 @@ except ImportError:
         DatasetSIFT1M, DatasetDeep1B, DatasetBigANN
 
 # ds = DatasetDeep1B(10**6)
-ds = DatasetBigANN(nb_M=50)
+ds = DatasetBigANN(nb_M=10)
 # ds = DatasetSIFT1M()
 
 xq = ds.get_queries()
 xb = ds.get_database()
+print(xb.shape)
 gt = ds.get_groundtruth()
 
-xt = ds.get_train()
+xt = xb
+# xt = ds.get_train()
 
 nb, d = xb.shape
 nq, d = xq.shape
@@ -34,14 +36,14 @@ nt, d = xt.shape
 
 print('the dimension is {}, {}'.format(nb, d))
 
-k = 64
+k = 128
 
 
-def eval_recall(index, name, single_query=False):
+def eval_recall(index, name, single_query=False, nprobe=1):
     t0 = time.time()
     D, I = index.search(xq, k=k)
-
     t = time.time() - t0
+
     if single_query:
         t0 = time.time()
         for row in range(nq):
@@ -49,13 +51,15 @@ def eval_recall(index, name, single_query=False):
             D[row, :] = Ds
             I[row, :] = Is
         t = time.time() - t0
+
     speed = t * 1000 / nq
     qps = 1000 / speed
 
-    corrects = (gt[:, :1] == I[:, :k]).sum()
+    recall_k = 10
+    corrects = (gt[:, :1] == I[:, :recall_k]).sum()
     recall = corrects / nq
     print(
-        f'\tnprobe {index.nprobe:3d}, 1Recall@{k}: '
+        f'\tnprobe {nprobe:3d}, 1Recall@{recall_k}: '
         f'{recall:.6f}, speed: {speed:.6f} ms/query'
     )
 
@@ -64,7 +68,9 @@ def eval_recall(index, name, single_query=False):
 
 def eval_and_plot(
         name, rescale_norm=True, plot=True, single_query=False,
-        implem=None, num_threads=1):
+        implem=None, num_threads=1, refine_implem=0, k_factor=50):
+
+    is_refine = 'Refine' in name
     index = faiss.index_factory(d, name)
     index_path = f"indices/{name}.faissindex"
 
@@ -76,13 +82,25 @@ def eval_and_plot(
         index.add(xb)
         faiss.write_index(index, index_path)
 
+    if is_refine:
+        base_index = faiss.downcast_index(index.base_index)
+        #base_index = index.base_index
+    else:
+        base_index = index
+
     # search params
     if hasattr(index, 'rescale_norm'):
         index.rescale_norm = rescale_norm
         name += f"(rescale_norm={rescale_norm})"
-    if implem is not None and hasattr(index, 'implem'):
-        index.implem = implem
+    print('base implem', base_index.implem)
+    if implem is not None and hasattr(base_index, 'implem'):
+        base_index.implem = implem
         name += f"(implem={implem})"
+    if is_refine:
+        index.implem = refine_implem
+        name += f"(refine_implem={refine_implem})"
+        index.k_factor = k_factor
+        name += f"(k_factor={k_factor})"
     if single_query:
         name += f"(single_query={single_query})"
     if num_threads > 1:
@@ -92,14 +110,17 @@ def eval_and_plot(
 
     data = []
     print(f"======{name}")
-    for nprobe in 1, 4, 8, 16, 32, 64, 128, 256:
-        index.nprobe = nprobe
-        recall, qps = eval_recall(index, name, single_query=single_query)
+    for nprobe in [1, 4, 8, 16, 32, 64, 128, 256]:
+        base_index.nprobe = nprobe
+        recall, qps = eval_recall(index, name, single_query=single_query,nprobe=nprobe)
         data.append((recall, qps))
 
     if plot:
         data = np.array(data)
         plt.plot(data[:, 0], data[:, 1], label=name)  # x - recall, y - qps
+
+    del index
+
 
 
 M, nlist = 64, 4096
@@ -111,9 +132,12 @@ M, nlist = 64, 4096
 plt.figure(figsize=(8, 6), dpi=80)
 
 eval_and_plot(f"IVF{nlist},PQ{M}x4fs", num_threads=8)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=15, num_threads=8, refine_implem=1)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=15, num_threads=8, refine_implem=0)
 eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=8)
 eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=8)
 eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=15, num_threads=8)
+
 
 plt.title("Indices on Bigann50M")
 plt.xlabel("1Recall@{}".format(k))
