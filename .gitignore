@@ -17,3 +17,11 @@
 /tests/test
 /tests/gtest/
 faiss/python/swigfaiss_avx2.swig
+.idea/
+.qtc_clangd/
+build/
+cmake-build-debug/
+data/
+faiss.creator.user
+indices/
+

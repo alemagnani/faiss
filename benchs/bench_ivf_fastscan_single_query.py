@@ -19,7 +19,7 @@ except ImportError:
         DatasetSIFT1M, DatasetDeep1B, DatasetBigANN
 
 # ds = DatasetDeep1B(10**6)
-ds = DatasetBigANN(nb_M=10)
+ds = DatasetBigANN(nb_M=20)
 # ds = DatasetSIFT1M()
 
 xq = ds.get_queries()
@@ -36,23 +36,28 @@ nt, d = xt.shape
 
 print('the dimension is {}, {}'.format(nb, d))
 
-k = 128
+k = 256
 
 
-def eval_recall(index, name, single_query=False, nprobe=1):
+def eval_recall(index, name, single_query=False, nprobe=1, k=128, iterations=1):
+
+
     t0 = time.time()
-    D, I = index.search(xq, k=k)
+    for iter in range(iterations):
+        D, I = index.search(xq, k=k)
     t = time.time() - t0
 
     if single_query:
         t0 = time.time()
-        for row in range(nq):
-            Ds, Is = index.search(xq[row:row + 1], k=k)
-            D[row, :] = Ds
-            I[row, :] = Is
+        for iter in range(iterations):
+            for row in range(nq):
+                Ds, Is = index.search(xq[row:row + 1], k=k)
+                D[row, :] = Ds
+                I[row, :] = Is
+
         t = time.time() - t0
 
-    speed = t * 1000 / nq
+    speed = t * 1000 / (nq * iterations)
     qps = 1000 / speed
 
     recall_k = 10
@@ -68,7 +73,7 @@ def eval_recall(index, name, single_query=False, nprobe=1):
 
 def eval_and_plot(
         name, rescale_norm=True, plot=True, single_query=False,
-        implem=None, num_threads=1, refine_implem=0, k_factor=50):
+        implem=None, num_threads=1, refine_implem=0, k_factor=50, k=128):
 
     is_refine = 'Refine' in name
     index = faiss.index_factory(d, name)
@@ -92,7 +97,7 @@ def eval_and_plot(
     if hasattr(index, 'rescale_norm'):
         index.rescale_norm = rescale_norm
         name += f"(rescale_norm={rescale_norm})"
-    print('base implem', base_index.implem)
+    #print('base implem', base_index.implem)
     if implem is not None and hasattr(base_index, 'implem'):
         base_index.implem = implem
         name += f"(implem={implem})"
@@ -105,14 +110,15 @@ def eval_and_plot(
         name += f"(single_query={single_query})"
     if num_threads > 1:
         name += f"(num_threads={num_threads})"
-
+    name += f"(k={k})"
     faiss.omp_set_num_threads(num_threads)
 
     data = []
     print(f"======{name}")
-    for nprobe in [1, 4, 8, 16, 32, 64, 128, 256]:
+    #for nprobe in [1, 4, 8, 16, 32, 64, 128, 256]:
+    for nprobe in [256]:
         base_index.nprobe = nprobe
-        recall, qps = eval_recall(index, name, single_query=single_query,nprobe=nprobe)
+        recall, qps = eval_recall(index, name, single_query=single_query,nprobe=nprobe, k=k)
         data.append((recall, qps))
 
     if plot:
@@ -123,7 +129,7 @@ def eval_and_plot(
 
 
 
-M, nlist = 64, 4096
+M, nlist = 64, 1024
 
 # just for warmup...
 # eval_and_plot(f"IVF{nlist},PQ{M}x4fs", plot=False)
@@ -131,12 +137,21 @@ M, nlist = 64, 4096
 # benchmark
 plt.figure(figsize=(8, 6), dpi=80)
 
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", num_threads=8)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=15, num_threads=8, refine_implem=1)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=15, num_threads=8, refine_implem=0)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=8)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=8)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=15, num_threads=8)
+num_threads = 8
+k=128
+
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs", implem=0, num_threads=num_threads, k=k*50)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=1, k_factor=50, k=k)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=0, k_factor=50, k=k)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=16, num_threads=num_threads, k=k*50)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=15, num_threads=num_threads, k=k*50)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=num_threads, k=k*50)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=num_threads, k=k*50)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=num_threads, k=k*50)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=num_threads, k=k)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=num_threads, k=k)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=16, num_threads=num_threads, k=k)
+
 
 
 plt.title("Indices on Bigann50M")

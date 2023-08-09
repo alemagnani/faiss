@@ -477,9 +477,33 @@ struct ReservoirHandler : SIMDResultHandler<C, with_id_map> {
         times[1] += get_cy() - t1;
     }
 
+    void shrink() {
+        for (int q = 0; q < reservoirs.size(); q++) {
+            ReservoirTopN<C>& res = reservoirs[q];
+            if (res.i > res.n) {
+                res.shrink();
+            }
+        }
+
+    }
+
+    void add( ReservoirHandler& handler) {
+        for (int q = 0; q < reservoirs.size(); q++) {
+            ReservoirTopN<C>& res = handler.reservoirs[q];
+            ReservoirTopN<C>& res_local = reservoirs[q];
+
+            if (res.i > res.n) {
+                res.shrink();
+            }
+            for (int i = 0; i < res.i; i++) {
+                res_local.add(res.vals[i], res.ids[i]);
+            }
+        }
+    }
+
     void to_flat_arrays(
-            float* distances,
-            int64_t* labels,
+             float* distances,
+             int64_t* labels,
             const float* normalizers = nullptr) override {
         using Cf = typename std::conditional<
                 C::is_max,
@@ -508,9 +532,11 @@ struct ReservoirHandler : SIMDResultHandler<C, with_id_map> {
                 perm[i] = i;
             }
             // indirect sort of result arrays
+
             std::sort(perm.begin(), perm.begin() + res.i, [&res](int i, int j) {
                 return C::cmp(res.vals[j], res.vals[i]);
             });
+
             for (int i = 0; i < res.i; i++) {
                 heap_dis[i] = res.vals[perm[i]] * one_a + b;
                 heap_ids[i] = res.ids[perm[i]];

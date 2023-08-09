@@ -179,6 +179,17 @@ struct IndexIVFFastScan : IndexIVF {
             int impl,
             const Scaler& scaler) const;
 
+    // implem 16 and 17 is multithreaded internally across nprobes and queries but uses a different way to find top k among threads compared to implem_14
+    template <class C, class Scaler>
+    void search_implem_16(
+            idx_t n,
+            const float* x,
+            idx_t k,
+            float* distances,
+            idx_t* labels,
+            int impl,
+            const Scaler& scaler) const;
+
     // reconstruct vectors from packed invlists
     void reconstruct_from_offset(int64_t list_no, int64_t offset, float* recons)
             const override;

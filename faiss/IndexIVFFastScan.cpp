@@ -354,11 +354,9 @@ void IndexIVFFastScan::search_dispatch_implem(
     // actual implementation used
     int impl = implem;
 
-    if ( impl == 14 || impl  == 15 ) {
-        if ( n >= 10) {
+    if ( impl == 14 || impl  == 15 || impl  == 16 ) {
+        if ( n >= 4) {  //this is because those implementation don't handle well large number of queries and there are better implementation for this
             impl = 0;
-        } else if ( k > 20) {
-            impl = 15;
         }
     }
 
@@ -378,7 +376,7 @@ void IndexIVFFastScan::search_dispatch_implem(
     } else if (impl == 2) {
         search_implem_2<C>(n, x, k, distances, labels, scaler);
 
-    } else if (impl >= 10 && impl <= 15) {
+    } else if (impl >= 10 && impl <= 16) {
         size_t ndis = 0, nlist_visited = 0;
 
         if (n < 2) {
@@ -395,6 +393,8 @@ void IndexIVFFastScan::search_dispatch_implem(
                         scaler);
             } else if (impl == 14 || impl == 15) {
                 search_implem_14<C>(n, x, k, distances, labels, impl, scaler);
+            } else if (impl == 16 ) {
+                search_implem_16<C>(n, x, k, distances, labels, impl, scaler);
             } else {
                 search_implem_10<C>(
                         n,
@@ -430,8 +430,10 @@ void IndexIVFFastScan::search_dispatch_implem(
             }
             if (impl == 14 ||
                impl == 15) { // this might require slicing if there are too
-                              // many queries (for now we keep this simple)
-                search_implem_14<C>(n, x, k, distances, labels, impl, scaler);
+                             // many queries (for now we keep this simple)
+               search_implem_14<C>(n, x, k, distances, labels, impl, scaler);
+            }   else if (impl == 16 ){
+               search_implem_16<C>(n, x, k, distances, labels, impl, scaler);
             } else {
 #pragma omp parallel for reduction(+ : ndis, nlist_visited)
                 for (int slice = 0; slice < nslice; slice++) {
@@ -1227,6 +1229,159 @@ void IndexIVFFastScan::search_implem_14(
     indexIVF_stats.nq += n;
     indexIVF_stats.ndis += ndis;
     indexIVF_stats.nlist += nlist_visited;
+}
+
+template <class C, class Scaler>
+void IndexIVFFastScan::search_implem_16(
+        idx_t n,
+        const float* x,
+        idx_t k,
+        float* distances,
+        idx_t* labels,
+        int impl,
+        const Scaler& scaler) const {
+    if (n == 0) { // does not work well with reservoir
+        return;
+    }
+    FAISS_THROW_IF_NOT(bbs == 32);
+
+    std::unique_ptr<idx_t[]> coarse_ids(new idx_t[n * nprobe]);
+    std::unique_ptr<float[]> coarse_dis(new float[n * nprobe]);
+
+    quantizer->search(n, x, nprobe, coarse_dis.get(), coarse_ids.get());
+
+    size_t dim12 = ksub * M2;
+    AlignedTable<uint8_t> dis_tables;
+    AlignedTable<uint16_t> biases;
+    std::unique_ptr<float[]> normalizers(new float[2 * n]);
+
+    compute_LUT_uint8(
+            n,
+            x,
+            coarse_ids.get(),
+            coarse_dis.get(),
+            dis_tables,
+            biases,
+            normalizers.get());
+
+    struct QC {
+        int qno;     // sequence number of the query
+        int list_no; // list to visit
+        int rank;    // this is the rank'th result of the coarse quantizer
+    };
+    bool single_LUT = !lookup_table_is_3d();
+
+    std::vector<QC> qcs;
+    {
+        int ij = 0;
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < nprobe; j++) {
+                if (coarse_ids[ij] >= 0) {
+                    qcs.push_back(QC{i, int(coarse_ids[ij]), int(j)});
+                }
+                ij++;
+            }
+        }
+        std::sort(qcs.begin(), qcs.end(), [](const QC& a, const QC& b) {
+            return a.list_no < b.list_no;
+        });
+    }
+
+    struct SE {
+        size_t start; // start in the QC vector
+        size_t end;   // end in the QC vector
+        size_t list_size;
+    };
+    std::vector<SE> ses;
+    size_t i0_l = 0;
+    while (i0_l < qcs.size()) {
+        // find all queries that access this inverted list
+        int list_no = qcs[i0_l].list_no;
+        size_t i1 = i0_l + 1;
+
+        while (i1 < qcs.size() && i1 < i0_l + qbs2) {
+            if (qcs[i1].list_no != list_no) {
+                break;
+            }
+            i1++;
+        }
+
+        size_t list_size = invlists->list_size(list_no);
+
+        if (list_size == 0) {
+            i0_l = i1;
+            continue;
+        }
+        ses.push_back(SE{i0_l, i1, list_size});
+        i0_l = i1;
+    }
+
+    ReservoirHandler<C,true>global_handler(n, 0, k, 2 * k);
+
+#pragma omp parallel
+    {
+        // prepare the result handlers
+        ReservoirHandler<C, true> handler(n, 0, k, 2 * k);
+
+        int qbs2 = this->qbs2 ? this->qbs2 : 11;
+
+        std::vector<uint16_t> tmp_bias;
+        if (biases.get()) {
+            tmp_bias.resize(qbs2);
+            handler.dbias = tmp_bias.data();
+        }
+
+        std::set<int> q_set;
+
+#pragma omp for schedule(dynamic)
+        for (idx_t cluster = 0; cluster < ses.size(); cluster++) {
+            size_t i0 = ses[cluster].start;
+            size_t i1 = ses[cluster].end;
+            size_t list_size = ses[cluster].list_size;
+            int list_no = qcs[i0].list_no;
+
+            // re-organize LUTs and biases into the right order
+            int nc = i1 - i0;
+
+            std::vector<int> q_map(nc), lut_entries(nc);
+            AlignedTable<uint8_t> LUT(nc * dim12);
+            memset(LUT.get(), -1, nc * dim12);
+            int qbs = pq4_preferred_qbs(nc);
+
+            for (size_t i = i0; i < i1; i++) {
+                const QC& qc = qcs[i];
+                q_map[i - i0] = qc.qno;
+                q_set.insert(qc.qno);
+                int ij = qc.qno * nprobe + qc.rank;
+                lut_entries[i - i0] = single_LUT ? qc.qno : ij;
+                if (biases.get()) {
+                    tmp_bias[i - i0] = biases[ij];
+                }
+            }
+            pq4_pack_LUT_qbs_q_map(
+                    qbs, M2, dis_tables.get(), lut_entries.data(), LUT.get());
+
+
+            InvertedLists::ScopedCodes codes(invlists, list_no);
+            InvertedLists::ScopedIds ids(invlists, list_no);
+
+            // prepare the handler
+            handler.ntotal = list_size;
+            handler.q_map = q_map.data();
+            handler.id_map = ids.get();
+
+            pq4_accumulate_loop_qbs(                                           \
+                            qbs, list_size, M2, codes.get(), LUT.get(), handler, scaler);
+        }
+        handler.shrink();
+
+#pragma omp critical
+        {
+                global_handler.add(handler);
+        }
+    }
+    global_handler.to_flat_arrays(
+            distances, labels, skip & 16 ? nullptr : normalizers.get());
 }
 
 void IndexIVFFastScan::reconstruct_from_offset(

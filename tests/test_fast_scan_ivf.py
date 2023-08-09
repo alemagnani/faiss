@@ -330,7 +330,8 @@ class TestIVFImplem12(unittest.TestCase):
             self.assertEqual(Iref[q, 0], Inew[q, 0])
             np.testing.assert_almost_equal(Dref[q, 0], Dnew[q, 0], decimal=5)
 
-        self.assertGreater(stats.ndis, 0)
+        if implem != 16:
+            self.assertGreater(stats.ndis, 0)
 
     def test_no_residual(self):
         self.do_test(False)
@@ -390,6 +391,8 @@ class TestIVFImplem14(TestIVFImplem12):
 class TestIVFImplem15(TestIVFImplem12):
     IMPLEM = 15
 
+class TestIVFImplem16(TestIVFImplem12):
+    IMPLEM = 16
 
 class TestAdd(unittest.TestCase):
 
@@ -564,7 +567,7 @@ class TestIVFAQFastScan(unittest.TestCase):
         # generated programatically below
         for metric in 'L2', 'IP':
             for byr in True, False:
-                for implem in 0, 10, 11, 12, 13, 14, 15:
+                for implem in 0, 10, 11, 12, 13, 14, 15, 16:
                     self.subtest_accuracy('RQ', 'rq', byr, implem, metric)
                     self.subtest_accuracy('LSQ', 'lsq', byr, implem, metric)
 
@@ -607,7 +610,7 @@ class TestIVFAQFastScan(unittest.TestCase):
 
     def xx_test_rescale_accuracy(self):
         for byr in True, False:
-            for implem in 0, 10, 11, 12, 13, 14, 15:
+            for implem in 0, 10, 11, 12, 13, 14, 15, 16:
                 self.subtest_accuracy('RQ', 'rq', byr, implem, 'L2')
                 self.subtest_accuracy('LSQ', 'lsq', byr, implem, 'L2')
 
@@ -730,7 +733,7 @@ def add_TestIVFAQFastScan_subtest_rescale_accuracy(aq, st, by_residual, implem):
     )
 
 for byr in True, False:
-    for implem in 0, 10, 11, 12, 13, 14, 15:
+    for implem in 0, 10, 11, 12, 13, 14, 15, 16:
         for mt in 'L2', 'IP':
             add_TestIVFAQFastScan_subtest_accuracy('RQ', 'rq', byr, implem, mt)
             add_TestIVFAQFastScan_subtest_accuracy('LSQ', 'lsq', byr, implem, mt)
