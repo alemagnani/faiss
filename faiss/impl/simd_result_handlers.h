@@ -346,6 +346,7 @@ namespace {
 
 uint64_t get_cy() {
 #ifdef MICRO_BENCHMARK
+
     uint32_t high, low;
     asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
     return ((uint64_t)high << 32) | (low);

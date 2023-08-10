@@ -355,8 +355,8 @@ void IndexIVFFastScan::search_dispatch_implem(
     int impl = implem;
 
     if ( impl == 14 || impl  == 15 || impl  == 16 ) {
-        if ( n >= 4) {  //this is because those implementation don't handle well large number of queries and there are better implementation for this
-            impl = 0;
+        if (n >= omp_get_max_threads()) {  //this is because those implementation don't handle well large number of queries and there are better implementation for this
+           impl = 0;
         }
     }
 
@@ -1305,7 +1305,6 @@ void IndexIVFFastScan::search_implem_16(
             }
             i1++;
         }
-
         size_t list_size = invlists->list_size(list_no);
 
         if (list_size == 0) {
@@ -1315,9 +1314,9 @@ void IndexIVFFastScan::search_implem_16(
         ses.push_back(SE{i0_l, i1, list_size});
         i0_l = i1;
     }
-
     ReservoirHandler<C,true>global_handler(n, 0, k, 2 * k);
-
+    const idx_t ses_size = ses.size();
+    //uint64_t tt2_start = get_cy();
 #pragma omp parallel
     {
         // prepare the result handlers
@@ -1333,8 +1332,8 @@ void IndexIVFFastScan::search_implem_16(
 
         std::set<int> q_set;
 
-#pragma omp for schedule(dynamic)
-        for (idx_t cluster = 0; cluster < ses.size(); cluster++) {
+#pragma omp for schedule(dynamic) nowait
+        for (idx_t cluster = 0; cluster < ses_size; cluster++) {
             size_t i0 = ses[cluster].start;
             size_t i1 = ses[cluster].end;
             size_t list_size = ses[cluster].list_size;
@@ -1377,7 +1376,7 @@ void IndexIVFFastScan::search_implem_16(
 
 #pragma omp critical
         {
-                global_handler.add(handler);
+               global_handler.add(handler);
         }
     }
     global_handler.to_flat_arrays(

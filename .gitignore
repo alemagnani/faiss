@@ -21,7 +21,7 @@ faiss/python/swigfaiss_avx2.swig
 .qtc_clangd/
 build/
 cmake-build-debug/
-data/
+data
 faiss.creator.user
 indices/
 
