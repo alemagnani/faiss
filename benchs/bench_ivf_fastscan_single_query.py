@@ -42,12 +42,15 @@ k = 256
 def eval_recall(index, name, single_query=False, nprobe=1, k=128, iterations=1):
 
 
-    t0 = time.time()
-    for iter in range(iterations):
-        D, I = index.search(xq, k=k)
-    t = time.time() - t0
+    if not single_query:
+        t0 = time.time()
+        for iter in range(iterations):
+            D, I = index.search(xq, k=k)
+        t = time.time() - t0
 
-    if single_query:
+    else:
+        D = np.zeros((nq,k), dtype=np.float32)
+        I = np.zeros((nq,k), dtype=np.int64)
         t0 = time.time()
         for iter in range(iterations):
             for row in range(nq):
@@ -116,7 +119,7 @@ def eval_and_plot(
     data = []
     print(f"======{name}")
     #for nprobe in [1, 4, 8, 16, 32, 64, 128, 256]:
-    for nprobe in [64, 128, 256]:
+    for nprobe in [ 256]:
         base_index.nprobe = nprobe
         recall, qps = eval_recall(index, name, single_query=single_query,nprobe=nprobe, k=k)
         data.append((recall, qps))
@@ -141,13 +144,13 @@ num_threads = 4
 k=256
 k_factor=50
 
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", implem=0, num_threads=num_threads, k=k*k_factor)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=1, k_factor=50, k=k)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=0, k_factor=50, k=k)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", implem=0, num_threads=num_threads, k=k*k_factor)
+eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=1, k_factor=k_factor, k=k)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs,Refine(SQ8)", single_query=True, implem=16, num_threads=num_threads, refine_implem=0, k_factor=k_factor, k=k)
 eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=16, num_threads=num_threads, k=k*k_factor)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=15, num_threads=num_threads, k=k*k_factor)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=num_threads, k=k*k_factor)
-eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=num_threads, k=k*k_factor)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=15, num_threads=num_threads, k=k*k_factor)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=14, num_threads=num_threads, k=k*k_factor)
+#eval_and_plot(f"IVF{nlist},PQ{M}x4fs", single_query=True, implem=0, num_threads=num_threads, k=k*k_factor)
 
 
 

@@ -16,6 +16,8 @@
 #include <faiss/IndexFlatCodes.h>
 #include <faiss/IndexIVF.h>
 #include <faiss/impl/ScalarQuantizer.h>
+#include <faiss/utils/prefetch.h>
+
 
 namespace faiss {
 
@@ -25,6 +27,7 @@ namespace faiss {
 struct IndexScalarQuantizer : IndexFlatCodes {
     /// Used to encode the vectors
     ScalarQuantizer sq;
+
 
     /** Constructor.
      *
@@ -55,6 +58,10 @@ struct IndexScalarQuantizer : IndexFlatCodes {
     void sa_encode(idx_t n, const float* x, uint8_t* bytes) const override;
 
     void sa_decode(idx_t n, const uint8_t* bytes, float* x) const override;
+
+    void prefetch(idx_t id) const override;
+
+    private: const int cacheLinePerItem = 1 + (d -1) / CACHE_LINE;
 };
 
 /** An IVF implementation where the components of the residuals are

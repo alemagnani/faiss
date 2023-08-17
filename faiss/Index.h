@@ -277,6 +277,9 @@ struct Index {
      * trained in the same way and have the same
      * parameters). Otherwise throw. */
     virtual void check_compatible_for_merge(const Index& otherIndex) const;
+
+    virtual void prefetch(idx_t id) const {};
+
 };
 
 } // namespace faiss

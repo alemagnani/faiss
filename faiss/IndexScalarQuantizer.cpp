@@ -19,6 +19,7 @@
 #include <faiss/impl/IDSelector.h>
 #include <faiss/impl/ScalarQuantizer.h>
 #include <faiss/utils/utils.h>
+#include <faiss/utils/prefetch.h>
 
 namespace faiss {
 
@@ -110,6 +111,12 @@ void IndexScalarQuantizer::sa_decode(idx_t n, const uint8_t* bytes, float* x)
         const {
     FAISS_THROW_IF_NOT(is_trained);
     sq.decode(bytes, x, n);
+}
+
+void IndexScalarQuantizer::prefetch(idx_t id) const {
+    for (int i = 0; i < cacheLinePerItem; i++) {
+        prefetch_L2( codes.data() + id * d + i * CACHE_LINE );
+    }
 }
 
 /*******************************************************************

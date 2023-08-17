@@ -13,8 +13,14 @@
 #include <faiss/utils/Heap.h>
 #include <faiss/utils/distances.h>
 #include <faiss/utils/utils.h>
+#include <faiss/utils/prefetch.h>
+
+#include <faiss/impl/simd_result_handlers.h>
+
 
 namespace faiss {
+
+using namespace simd_result_handlers;
 
 /***************************************************
  * IndexRefine
@@ -120,48 +126,134 @@ void IndexRefine::search(
 
     for (int i = 0; i < n * k_base; i++)
         assert(base_labels[i] >= -1 && base_labels[i] < ntotal);
-    FAISS_THROW_IF_NOT( implem == 0 || implem == 1 );
+    FAISS_THROW_IF_NOT( implem == 0 || implem == 1 || implem == 2 );
+    //uint64_t ttgstart = get_cy();
     if ( implem == 0) {
+        std::vector<idx_t> order(k_base);
+        for (idx_t i = 0; i < k_base; i++) {
+            order[i] = i;
+        }
+
+
+
+
+
         // parallelize over queries
-#pragma omp parallel if (n > 1)
+//#pragma omp parallel if (n > 1)
         {
             std::unique_ptr<DistanceComputer> dc(
                     refine_index->get_distance_computer());
-#pragma omp for
+//#pragma omp for
             for (idx_t i = 0; i < n; i++) {
                 dc->set_query(x + i * d);
                 idx_t ij = i * k_base;
+
+                std::sort(order.begin(), order.end(), [&base_labels, &ij](idx_t a, idx_t b) {
+                    return base_labels[ij + a] > base_labels[ij + b];
+                });
+
                 for (idx_t j = 0; j < k_base; j++) {
-                    idx_t idx = base_labels[ij];
+                    idx_t idx = base_labels[order[j]+ij];
                     //break;
                     if (idx < 0)
-                        break;
-                    base_distances[ij] = (*dc)(idx);
-                    ij++;
+                        continue;
+                    base_distances[order[j]+ij] = (*dc)(idx);
+                    //ij++;
                 }
             }
         }
     } else if (implem == 1) {
            for (idx_t i = 0; i < n; i++) {
-#pragma omp parallel if (kfact > 1)
+//#pragma omp parallel if (kfact > 1)
         {
             std::unique_ptr<DistanceComputer> dc(
                     refine_index->get_distance_computer());
 
                 dc->set_query(x + i * d);
-#pragma omp for
+//#pragma omp for schedule(dynamic)
+
             for (idx_t loop = 0; loop < kfact; loop++) {
                 idx_t start = i * k_base + k * loop;
                 for (idx_t j = start; j < k + start; j++) {
                     idx_t idx = base_labels[j];
+
                     if (idx < 0)
                         break;
-                    base_distances[j] = (*dc)(idx);
+                    if ( j+ 1 < k+start) {
+                        base_distances[j] = (*dc)(idx, base_labels[j + 1]);
+                    } else {
+                        base_distances[j] = (*dc)(idx);
+                    }
                 }
             }
             }
         }
+    } else if (implem == 2) {
+        const int unrolled_by = 3;
+        const idx_t prefetch_datapoints = std::max<idx_t> (1, PREFETCH_AHEAD_BYTES/ (unrolled_by * d));
+        const idx_t outer_iterations = k_base /unrolled_by;
+
+
+        idx_t current;
+        for (idx_t i = 0; i < n; i++) {
+
+            std::unique_ptr<DistanceComputer> dc(
+                    refine_index->get_distance_computer());
+            dc->set_query(x + i * d);
+            idx_t ij = i * k_base;
+
+            // we prefetch the ones at the end that don't divide equally
+            for (idx_t f = k_base / unrolled_by * unrolled_by; f < k_base; f++) {
+                current = ij + f;
+                idx_t idx = base_labels[current];
+                refine_index->prefetch(idx);
+            }
+
+            // we prefetch the first iteration
+            for ( idx_t f = 0; f < prefetch_datapoints; f++) {
+                for (idx_t inner_loop = 0; inner_loop < unrolled_by; inner_loop++) {
+                    current = ij + f + outer_iterations * inner_loop;
+                    idx_t idx = base_labels[current];
+                    refine_index->prefetch(idx);
+                }
+            }
+
+            // we take care of the items that don't exactly divide by unrolled_by
+            for (idx_t f = k_base / unrolled_by * unrolled_by; f < k_base; f++) {
+                current = ij + f;
+                idx_t idx = base_labels[current];
+                if (idx < 0)
+                    break;
+                base_distances[current] = (*dc)(idx);
+            }
+
+            for (idx_t loop = 0; loop < outer_iterations; loop++) {
+
+                // prefetch items
+                if ( loop + prefetch_datapoints < outer_iterations) {
+                    for (idx_t inner_loop = 0; inner_loop < unrolled_by; inner_loop++) {
+                        current = ij + prefetch_datapoints + outer_iterations * inner_loop;
+                        idx_t idx = base_labels[current];
+                        refine_index->prefetch(idx);
+                    }
+                }
+                // compute distances
+                for (idx_t inner_loop = 0; inner_loop < unrolled_by; inner_loop++) {
+                    current = ij + outer_iterations * inner_loop;
+                    idx_t idx = base_labels[current];
+                    if (idx < 0)
+                        break;
+                    base_distances[current] = (*dc)(idx);
+                }
+                ij++;
+            }
+        }
     }
+
+    //uint64_t end = get_cy();
+    //uint64_t delta = end - ttgstart;
+    //printf("delta %lu\n",delta );
+
     // sort and store result
     if (metric_type == METRIC_L2) {
         typedef CMax<float, idx_t> C;
