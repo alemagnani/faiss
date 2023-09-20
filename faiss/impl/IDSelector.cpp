@@ -122,4 +122,154 @@ bool IDSelectorBitmap::is_member(idx_t ii) const {
     return (bitmap[i >> 3] >> (i & 7)) & 1;
 }
 
+/***********************************************************************
+ * IDSelectorIVF
+ ***********************************************************************/
+
+
+IDSelectorIVFSingle::IDSelectorIVFSingle(size_t n, const int32_t* ids) : n(n), ids(ids) {};
+
+bool IDSelectorIVFSingle::is_member(idx_t id) const{
+    if ( n == 0 ) {
+        return false;
+    }
+    int32_t value;
+    while(offset < n) {
+        value = ids[offset];
+        //printf("%d, %ld, %d\n", value, id, offset);
+        if ( value > id ){
+            return false;
+        } else if ( value == id) {
+            offset++;
+            return true;
+        }
+        offset++;
+    }
+    return false;
+}
+
+
+IDSelectorIVFTwo::IDSelectorIVFTwo(const int32_t* ids, const int32_t* limits) :  ids(ids), limits(limits){};
+
+
+void IDSelectorIVFTwo::set_words(int32_t w1, int32_t w2) {
+
+    delete(this->sel1);
+    delete(this->sel2);
+
+
+    this->sel1 = new IDSelectorIVFSingle(limits[w1+1]-limits[w1], this->ids + limits[w1]);
+    if ( w2 >= 0) {
+        this->sel2 = new IDSelectorIVFSingle(limits[w2+1]-limits[w2], this->ids + limits[w2]);
+    } else {
+        this->sel2 = nullptr;
+    }
+}
+
+
+void IDSelectorIVFTwo::set_list(idx_t list_no) const{
+
+    this->sel1->set_list(list_no);
+    if (this -> sel2 != nullptr) {
+        this->sel2->set_list(list_no);
+    }
+}
+
+
+bool IDSelectorIVFTwo::is_member(idx_t id) const  {
+    const bool out = this->sel1->is_member(id);
+    if ( !out or this-> sel2 == nullptr){
+        return out;
+    }
+    return this->sel2->is_member(id);
+}
+
+/***********************************************************************
+ * IDSelectorIVFClusterAware
+ ***********************************************************************/
+
+IDSelectorIVFClusterAware::IDSelectorIVFClusterAware(const int32_t* ids,  const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits) :  ids(ids), clusters(clusters), cluster_limits(cluster_limits), limits(limits){};
+
+void IDSelectorIVFClusterAware::set_words(int32_t w1, int32_t w2) {
+    limit_w1_low = cluster_limits[w1];
+    limit_w1_high = cluster_limits[w1+1];
+    if ( w2 >= 0 ) {
+        limit_w2_low = cluster_limits[w2];
+        limit_w2_high = cluster_limits[w2+1];
+    } else {
+        limit_w2_low = -1;
+        limit_w2_high = -1;
+    }
+}
+
+bool find_cluster(const int32_t n, const int16_t* array, const idx_t list_no, int32_t  &found_pos) {
+
+    if (n == 0 || array[0] > list_no || array[n-1] < list_no ) {
+        return false;
+    }
+    if ( array[0] == list_no ) {
+        found_pos = 0;
+        return true;
+    }
+    int32_t j0 = 0, j1 = n;
+
+    while (j1 > j0 + 1) {
+            int32_t jmed = (j0 + j1) / 2;
+            if (array[jmed] > list_no) {
+                j1 = jmed;
+            }
+            else if ( array[jmed] == list_no) {
+                found_pos = jmed;
+                return true;
+            } else {
+                j0 = jmed;
+            }
+    }
+    return false;
+}
+
+bool IDSelectorIVFClusterAware::is_member(idx_t id) const  {
+    if (this->sel1 == nullptr or (limit_w2_low >=0  && this->sel2 == nullptr)) {
+            return false;
+    }
+    const bool out = this->sel1->is_member(id);
+    if ( !out or limit_w2_low < 0 ){
+        return out;
+    }
+    return this->sel2->is_member(id);
+}
+
+
+void IDSelectorIVFClusterAware::set_list(idx_t list_no) const{
+
+    delete(this->sel1);
+    delete(this->sel2);
+
+    int32_t cluster_pos;
+    bool found;
+    found = find_cluster(limit_w1_high-limit_w1_low, clusters + limit_w1_low, list_no, cluster_pos );
+    //printf("finding for %ld list, %d begin %d end\n", list_no, begin, end);
+    int32_t ids_pos_start;
+    int32_t ids_pos_end;
+    if ( found ) {
+        ids_pos_start = limits[cluster_pos], ids_pos_end = limits[cluster_pos + 1];
+        this->sel1 = new IDSelectorIVFSingle(
+                (ids_pos_end - ids_pos_start), this->ids + ids_pos_start);
+    }
+    if ( limit_w2_low >=0 ) {
+        found = find_cluster(limit_w2_high-limit_w2_low, clusters + limit_w2_low, list_no, cluster_pos );
+        if ( found ) {
+                ids_pos_start = limits[cluster_pos], ids_pos_end = limits[cluster_pos + 1];
+                this->sel2 = new IDSelectorIVFSingle(
+                        (ids_pos_end - ids_pos_start),
+                        this->ids + ids_pos_start);
+        }
+    }
+}
+
+
+
+
+
+
 } // namespace faiss

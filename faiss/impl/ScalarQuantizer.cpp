@@ -1198,6 +1198,13 @@ struct IVFSQScannerIP : InvertedListScanner {
     void set_list(idx_t list_no, float coarse_dis) override {
         this->list_no = list_no;
         accu0 = by_residual ? coarse_dis : 0;
+
+        const IDSelector* selLocal = this->sel ? this->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVF*>(selLocal);
+        if (ivf_sel) {
+            ivf_sel->set_list(list_no);
+        }
+
     }
 
     float distance_to_code(const uint8_t* code) const final {
@@ -1298,6 +1305,15 @@ struct IVFSQScannerL2 : InvertedListScanner {
         } else {
             dc.set_query(x);
         }
+
+        const IDSelector* selLocal = this->sel ? this->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVF*>(selLocal);
+
+        if (ivf_sel) {
+            ivf_sel->set_list(list_no);
+        }
+
+
     }
 
     float distance_to_code(const uint8_t* code) const final {

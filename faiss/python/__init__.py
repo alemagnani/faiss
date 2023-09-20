@@ -40,6 +40,8 @@ class_wrappers.handle_NSG(IndexNSG)
 class_wrappers.handle_MapLong2Long(MapLong2Long)
 class_wrappers.handle_IDSelectorSubset(IDSelectorBatch, class_owns=True)
 class_wrappers.handle_IDSelectorSubset(IDSelectorArray, class_owns=False)
+class_wrappers.handle_IDSelectorSubset(IDSelectorIVFTwo, class_owns=False)
+class_wrappers.handle_IDSelectorSubset(IDSelectorIVFClusterAware, class_owns=False)
 class_wrappers.handle_IDSelectorSubset(IDSelectorBitmap, class_owns=False, force_int64=False)
 class_wrappers.handle_CodeSet(CodeSet)
 

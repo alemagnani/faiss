@@ -170,4 +170,85 @@ struct IDSelectorXOr : IDSelector {
     virtual ~IDSelectorXOr() {}
 };
 
+struct IDSelectorIVF : IDSelector {
+    // initialize the selector for the specified list
+    virtual void set_list(idx_t list_no) const {};
+
+};
+
+
+struct IDSelectorIVFSingle : IDSelectorIVF {
+
+    size_t n;
+    const int32_t* ids;
+    mutable int32_t  offset = 0;
+
+    IDSelectorIVFSingle(size_t n, const int32_t* ids);
+
+    // initialize the selector for the specified list
+    void set_list(idx_t list_no) const  override {
+        offset = 0;
+    };
+
+    bool is_member(idx_t id) const override;
+    ~IDSelectorIVFSingle() override = default;
+};
+
+
+
+
+struct IDSelectorIVFTwo : IDSelectorIVF {
+
+    const int32_t* ids;
+    const int32_t * limits;
+    IDSelectorIVFSingle* sel1 = nullptr;
+    IDSelectorIVFSingle* sel2 = nullptr;
+
+    IDSelectorIVFTwo(const int32_t* ids, const int32_t* limits);
+
+    void set_words(int32_t w1, int32_t w2=-1);
+
+    // initialize the selector for the specified list
+    void set_list(idx_t list_no) const override;
+
+    bool is_member(idx_t id) const override;
+
+    ~IDSelectorIVFTwo() override = default;
+};
+
+
+struct IDSelectorIVFClusterAware : IDSelectorIVF {
+
+    // the siZe if ids and cluster_ids is the same
+    // the ids are ordered in such a way that for a given word the cluster are in order
+    const int32_t* ids;
+    const int32_t * limits;
+    const int16_t* clusters;
+    const int32_t* cluster_limits;
+
+
+
+    int32_t limit_w1_low = -1;
+    int32_t limit_w1_high = -1;
+    int32_t limit_w2_low = -1;
+    int32_t limit_w2_high = -1;
+
+
+    mutable IDSelectorIVFSingle* sel1 = nullptr;
+    mutable IDSelectorIVFSingle* sel2 = nullptr;
+
+    IDSelectorIVFClusterAware(const int32_t* ids, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits);
+
+    void set_words(int32_t w1, int32_t w2=-1);
+
+    // initialize the selector for the specified list
+    void set_list(idx_t list_no) const override;
+
+    bool is_member(idx_t id) const override;
+
+    ~IDSelectorIVFClusterAware() override = default;
+};
+
+
+
 } // namespace faiss
