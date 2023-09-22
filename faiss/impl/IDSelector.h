@@ -233,6 +233,8 @@ struct IDSelectorIVFClusterAware : IDSelectorIVF {
     int32_t limit_w2_low = -1;
     int32_t limit_w2_high = -1;
 
+    mutable bool found_cluster_w1=false;
+    mutable bool found_cluster_w2=false;
 
     mutable IDSelectorIVFSingle* sel1 = nullptr;
     mutable IDSelectorIVFSingle* sel2 = nullptr;
@@ -248,6 +250,90 @@ struct IDSelectorIVFClusterAware : IDSelectorIVF {
 
     ~IDSelectorIVFClusterAware() override = default;
 };
+
+struct IDSelectorIVFClusterAwareIntersect : IDSelectorIVF {
+
+    // the siZe if ids and cluster_ids is the same
+    // the ids are ordered in such a way that for a given word the cluster are in order
+    const int32_t* ids;
+    const int32_t * limits;
+    const int16_t* clusters;
+    const int32_t* cluster_limits;
+
+    int32_t* tmp;
+
+
+
+    int32_t limit_w1_low = -1;
+    int32_t limit_w1_high = -1;
+    int32_t limit_w2_low = -1;
+    int32_t limit_w2_high = -1;
+
+    mutable bool found_cluster_w=false;
+
+    mutable IDSelectorIVFSingle* sel = nullptr;
+
+
+    IDSelectorIVFClusterAwareIntersect(const int32_t* ids, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits);
+
+    void set_words(int32_t w1, int32_t w2=-1);
+
+    // initialize the selector for the specified list
+    void set_list(idx_t list_no) const override;
+
+    bool is_member(idx_t id) const override;
+
+    ~IDSelectorIVFClusterAwareIntersect(
+
+            ) override {
+        delete(tmp);
+    };
+};
+
+struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVF {
+
+    // the siZe if ids and cluster_ids is the same
+    // the ids are ordered in such a way that for a given word the cluster are in order
+    const int32_t* in_cluster_positions;
+    const int32_t * limits;
+    const int16_t* clusters;
+    const int32_t* cluster_limits;
+
+    int32_t* tmp;
+
+    mutable const int32_t* range;
+    mutable int32_t range_size;
+
+
+    int32_t limit_w1_low = -1;
+    int32_t limit_w1_high = -1;
+    int32_t limit_w2_low = -1;
+    int32_t limit_w2_high = -1;
+
+
+    int32_t get_size() const{
+        return range_size;
+    }
+
+    const int32_t* get_range() const{
+        return range;
+    }
+
+    IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits);
+
+    void set_words(int32_t w1, int32_t w2=-1);
+
+    // initialize the selector for the specified list
+    void set_list(idx_t list_no) const override;
+
+    bool is_member(idx_t id) const override;
+
+    ~IDSelectorIVFClusterAwareIntersectDirect(
+            ) override {
+        delete(tmp);
+    };
+};
+
 
 
 

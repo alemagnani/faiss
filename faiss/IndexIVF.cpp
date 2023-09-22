@@ -528,9 +528,9 @@ void IndexIVF::search_preassigned(
                     return list_size;
                 } else {
                     size_t list_size = invlists->list_size(key);
-                    if (list_size > list_size_max) {
-                        list_size = list_size_max;
-                    }
+                    //if (list_size > list_size_max) {
+                    //    list_size = list_size_max;
+                    //}
 
                     InvertedLists::ScopedCodes scodes(invlists, key);
                     const uint8_t* codes = scodes.get();
@@ -556,10 +556,10 @@ void IndexIVF::search_preassigned(
                         ids += jmin;
                     }
 
-                    nheap += scanner->scan_codes(
+                    size_t scanned = scanner->scan_codes(
                             list_size, codes, ids, simi, idxi, k);
-
-                    return list_size;
+                    nheap += scanned;
+                    return scanned;
                 }
             } catch (const std::exception& e) {
                 std::lock_guard<std::mutex> lock(exception_mutex);
@@ -602,6 +602,7 @@ void IndexIVF::search_preassigned(
                         break;
                     }
                 }
+                //printf("scanned %ld\n", nscan);
 
                 ndis += nscan;
                 reorder_result(simi, idxi);

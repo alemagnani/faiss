@@ -1322,22 +1322,46 @@ struct IVFSQScannerL2 : InvertedListScanner {
 
     size_t scan_codes(
             size_t list_size,
-            const uint8_t* codes,
+            const uint8_t* codes_init,
             const idx_t* ids,
             float* simi,
             idx_t* idxi,
             size_t k) const override {
         size_t nup = 0;
-        for (size_t j = 0; j < list_size; j++, codes += code_size) {
-            if (use_sel && !sel->is_member(use_sel == 1 ? ids[j] : j)) {
-                continue;
+
+        const IDSelector* selLocal = this->sel ? this->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVFClusterAwareIntersectDirect*>(selLocal);
+
+        if (ivf_sel) {
+            //printf("running with direct entries\n");
+            const int32_t* range = ivf_sel->get_range();
+            const uint8_t* codes;
+            //printf("running for %d entries\n", ivf_sel->get_size());
+            for (size_t pos = 0; pos < ivf_sel->get_size(); pos++) {
+                size_t j = range[pos];
+                //printf("running position %ld for a total of %ld\n", j, list_size);
+                codes = codes_init + j * code_size;
+                float dis = dc.query_to_code(codes);
+
+                if (dis < simi[0]) {
+                    int64_t id = store_pairs ? (list_no << 32 | j) : ids[j];
+                    maxheap_replace_top(k, simi, idxi, dis, id);
+                }
+                nup++;
             }
+        } else {
+            for (size_t j = 0; j < list_size; j++, codes_init += code_size) {
+                if (use_sel && !sel->is_member(use_sel == 1 ? ids[j] : j)) {
+                    continue;
+                }
 
-            float dis = dc.query_to_code(codes);
+                float dis = dc.query_to_code(codes_init);
 
-            if (dis < simi[0]) {
-                int64_t id = store_pairs ? (list_no << 32 | j) : ids[j];
-                maxheap_replace_top(k, simi, idxi, dis, id);
+                if (dis < simi[0]) {
+                    int64_t id = store_pairs ? (list_no << 32 | j) : ids[j];
+                    maxheap_replace_top(k, simi, idxi, dis, id);
+
+                }
                 nup++;
             }
         }

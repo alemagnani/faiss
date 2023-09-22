@@ -82,6 +82,7 @@ set(FAISS_SRC
   invlists/InvertedListsIOHook.cpp
   utils/Heap.cpp
   utils/WorkerThread.cpp
+        utils/intersection.cpp
   utils/distances.cpp
   utils/distances_simd.cpp
   utils/extra_distances.cpp
@@ -192,6 +193,7 @@ set(FAISS_HEADERS
   utils/fp16.h
   utils/hamming-inl.h
   utils/hamming.h
+        utils/intersection.h
   utils/ordered_key_value.h
   utils/partitioning.h
   utils/prefetch.h
@@ -226,7 +228,9 @@ endif()
 # Export FAISS_HEADERS variable to parent scope.
 set(FAISS_HEADERS ${FAISS_HEADERS} PARENT_SCOPE)
 
-add_library(faiss ${FAISS_SRC})
+add_library(faiss ${FAISS_SRC}
+        utils/intersection.h
+        utils/intersection.cpp)
 
 add_library(faiss_avx2 ${FAISS_SRC})
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx2")
