@@ -9,7 +9,18 @@
 #include <faiss/impl/IDSelector.h>
 #include <faiss/utils/intersection.h>
 
+#include <cstring>
+
+
 namespace faiss {
+
+
+uint64_t get_my_cy() {
+    uint32_t high, low;
+    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | (low);
+}
+
 
 /***********************************************************************
  * IDSelectorRange
@@ -167,12 +178,13 @@ void IDSelectorIVFTwo::set_words(int32_t w1, int32_t w2) {
 }
 
 
-void IDSelectorIVFTwo::set_list(idx_t list_no) const{
+bool IDSelectorIVFTwo::set_list(idx_t list_no) const{
 
     this->sel1->set_list(list_no);
     if (this -> sel2 != nullptr) {
         this->sel2->set_list(list_no);
     }
+    return true;
 }
 
 
@@ -215,7 +227,6 @@ bool find_cluster(const int32_t n, const int16_t* array, const int_fast16_t list
     int32_t j0 = 0, j1 = n;
 
     while (j1 > j0 + 1) {
-
             int32_t jmed = (j0 + j1) / 2;
             if (array[jmed] > list_no) {
                 j1 = jmed;
@@ -242,7 +253,7 @@ bool IDSelectorIVFClusterAware::is_member(idx_t id) const  {
 }
 
 
-void IDSelectorIVFClusterAware::set_list(idx_t list_no) const{
+bool IDSelectorIVFClusterAware::set_list(idx_t list_no) const{
 
     delete(this->sel1);
     this->sel1 = nullptr;
@@ -271,14 +282,15 @@ void IDSelectorIVFClusterAware::set_list(idx_t list_no) const{
                 found_cluster_w1 = false;
         }
     }
+    return true;
 }
 
 /***********************************************************************
  * IDSelectorIVFClusterAwareIntersect
  ***********************************************************************/
 
-IDSelectorIVFClusterAwareIntersect::IDSelectorIVFClusterAwareIntersect(const int32_t* ids,  const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits) :  ids(ids), clusters(clusters), cluster_limits(cluster_limits), limits(limits){
-                                                                                tmp = new int32_t [5000];
+IDSelectorIVFClusterAwareIntersect::IDSelectorIVFClusterAwareIntersect(const int32_t* ids,  const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits, idx_t size_tmp) :  ids(ids), clusters(clusters), cluster_limits(cluster_limits), limits(limits){
+                                                                                tmp = new int32_t [size_tmp];
                                                                         };
 
 void IDSelectorIVFClusterAwareIntersect::set_words(int32_t w1, int32_t w2) {
@@ -296,18 +308,20 @@ void IDSelectorIVFClusterAwareIntersect::set_words(int32_t w1, int32_t w2) {
 
 
 bool IDSelectorIVFClusterAwareIntersect::is_member(idx_t id) const  {
-    if ( ! found_cluster_w){
+    //printf("checking memebership in intersect for id %ld\n", id);
+    if ( !found_cluster_w){
         return false;
     }
     return  this->sel->is_member(id);
 }
 
 
-void IDSelectorIVFClusterAwareIntersect::set_list(idx_t list_no) const{
+bool IDSelectorIVFClusterAwareIntersect::set_list(idx_t list_no) const{
 
+    //printf("set list in intersect inernal %ld\n",list_no);
     delete(this->sel);
     this->sel = nullptr;
-
+    ///printf("done\n");
     int32_t cluster_pos;
 
     found_cluster_w = find_cluster(limit_w1_high-limit_w1_low, clusters + limit_w1_low, list_no, cluster_pos );
@@ -320,47 +334,39 @@ void IDSelectorIVFClusterAwareIntersect::set_list(idx_t list_no) const{
                 this->sel = new IDSelectorIVFSingle(
                         (ids_pos_end - ids_pos_start),
                         this->ids + ids_pos_start);
-                return;
+                return (ids_pos_end - ids_pos_start) > 0;
         } else {
                 found_cluster_w = find_cluster(limit_w2_high-limit_w2_low, clusters + limit_w2_low, list_no, cluster_pos );
                 if ( found_cluster_w ) {
-                int32_t ids_pos_start_2;
-                int32_t ids_pos_end_2;
-                ids_pos_start_2 = limits[limit_w2_low + cluster_pos], ids_pos_end_2 = limits[limit_w2_low + cluster_pos + 1];
+                    int32_t ids_pos_start_2;
+                    int32_t ids_pos_end_2;
+                    ids_pos_start_2 = limits[limit_w2_low + cluster_pos], ids_pos_end_2 = limits[limit_w2_low + cluster_pos + 1];
 
-                //printf("intersecting size %d, %d \n", ids_pos_end - ids_pos_start, ids_pos_end_2 - ids_pos_start_2);
+                    //printf("intersecting size %d, %d \n", ids_pos_end - ids_pos_start, ids_pos_end_2 - ids_pos_start_2);
 
-                size_t size_intersection =  SIMDintersection(
-                        reinterpret_cast<const uint32_t*>(
-                                this->ids + ids_pos_start), ids_pos_end - ids_pos_start,
-                        reinterpret_cast<const uint32_t*>(
-                                this->ids + ids_pos_start_2), ids_pos_end_2 - ids_pos_start_2,
-                        reinterpret_cast<uint32_t*>(this->tmp));
+                    size_t size_intersection =  SIMDintersection(
+                            reinterpret_cast<const uint32_t*>(
+                                    this->ids + ids_pos_start), ids_pos_end - ids_pos_start,
+                            reinterpret_cast<const uint32_t*>(
+                                    this->ids + ids_pos_start_2), ids_pos_end_2 - ids_pos_start_2,
+                            reinterpret_cast<uint32_t*>(this->tmp));
 
-                /*
-                size_t size_intersection =  scalar(
-                        reinterpret_cast<const uint32_t*>(
-                                this->ids + ids_pos_start), ids_pos_end - ids_pos_start,
-                        reinterpret_cast<const uint32_t*>(
-                                this->ids + ids_pos_start_2), ids_pos_end_2 - ids_pos_start_2,
-                        reinterpret_cast<uint32_t*>(this->tmp));
-                */
-                //printf("intersecting size %d, %d and output intersection is %d\n", ids_pos_end - ids_pos_start, ids_pos_end_2 - ids_pos_start_2, size_intersection);
-                if (size_intersection == 0 ) {
-                    found_cluster_w = false;
-                    return;
-                }
-                this->sel = new IDSelectorIVFSingle(
-                        size_intersection,
-                        this->tmp);
+
+                    //printf("intersecting size %d, %d and output intersection is %d\n", ids_pos_end - ids_pos_start, ids_pos_end_2 - ids_pos_start_2, size_intersection);
+                    if (size_intersection == 0 ) {
+                        found_cluster_w = false;
+                        return false;
+                    }
+                    this->sel = new IDSelectorIVFSingle(
+                            size_intersection,
+                            this->tmp);
+                    return  true;
                 } else {
-                    return;
+                    return false;
                 }
-
-
         }
     } else {
-        return;
+        return false;
     }
 }
 
@@ -368,8 +374,8 @@ void IDSelectorIVFClusterAwareIntersect::set_list(idx_t list_no) const{
  * IDSelectorIVFClusterAwareIntersectDirect
  ***********************************************************************/
 
-IDSelectorIVFClusterAwareIntersectDirect::IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions,  const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits) :  in_cluster_positions(in_cluster_positions), clusters(clusters), cluster_limits(cluster_limits), limits(limits){
-    tmp = new int32_t [5000];
+IDSelectorIVFClusterAwareIntersectDirect::IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions,  const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits,  idx_t size_tmp) :  in_cluster_positions(in_cluster_positions), clusters(clusters), cluster_limits(cluster_limits), limits(limits){
+    tmp = new int32_t [size_tmp];
 };
 
 void IDSelectorIVFClusterAwareIntersectDirect::set_words(int32_t w1, int32_t w2) {
@@ -392,11 +398,14 @@ bool IDSelectorIVFClusterAwareIntersectDirect::is_member(idx_t id) const  {
 }
 
 
-void IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
-
+bool IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
+    //uint64_t start = get_my_cy();
     int32_t cluster_pos;
 
     bool found_cluster_w = find_cluster(limit_w1_high-limit_w1_low, clusters + limit_w1_low, list_no, cluster_pos );
+    //uint64_t end_find_cluster = get_my_cy();
+    //IDSelectorMy_Stats.find_cluster += end_find_cluster - start;
+
     //printf("set list\n");
     int32_t ids_pos_start;
     int32_t ids_pos_end;
@@ -406,13 +415,100 @@ void IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
                 //printf("found cluster of size %d\n", ids_pos_end - ids_pos_start );
                 this->range = this->in_cluster_positions + ids_pos_start;
                 this->range_size = ids_pos_end - ids_pos_start;
-                return;
+
+                //uint64_t end = get_my_cy();
+                //IDSelectorMy_Stats.set_list_time += end - start;
+                return this->range_size > 0;
         } else {
+
+                //uint64_t start_find_cluster = get_my_cy();
                 found_cluster_w = find_cluster(limit_w2_high-limit_w2_low, clusters + limit_w2_low, list_no, cluster_pos );
+
+                //end_find_cluster = get_my_cy();
+                //IDSelectorMy_Stats.find_cluster += end_find_cluster - start_find_cluster;
+
                 if ( found_cluster_w ) {
                     int32_t ids_pos_start_2;
                     int32_t ids_pos_end_2;
                     ids_pos_start_2 = limits[limit_w2_low + cluster_pos], ids_pos_end_2 = limits[limit_w2_low + cluster_pos + 1];
+
+                    //uint64_t start_intersection = get_my_cy();
+                    size_t size_intersection =  SIMDintersection(
+                            reinterpret_cast<const uint32_t*>(
+                                    this->in_cluster_positions + ids_pos_start), ids_pos_end - ids_pos_start,
+                            reinterpret_cast<const uint32_t*>(
+                                    this->in_cluster_positions + ids_pos_start_2), ids_pos_end_2 - ids_pos_start_2,
+                            reinterpret_cast<uint32_t*>(this->tmp));
+                    //uint64_t end_intersection = get_my_cy();
+                    //IDSelectorMy_Stats.intersection += end_intersection - start_intersection;
+
+                    this->range = this->tmp;
+                    this->range_size = size_intersection;
+                    //printf("found size of intersection %d\n",size_intersection);
+                    return size_intersection > 0;
+
+                } else {
+                    this->range = nullptr;
+                    this->range_size = 0;
+                    //uint64_t end = get_my_cy();
+                    //IDSelectorMy_Stats.set_list_time += end - start;
+                    return false;
+                }
+        }
+    } else {
+        this->range = nullptr;
+        this->range_size = 0;
+        //uint64_t end = get_my_cy();
+        //IDSelectorMy_Stats.set_list_time += end - start;
+        return false;
+    }
+    uint64_t end = get_my_cy();
+    //IDSelectorMy_Stats.set_list_time += end - start;
+    return true;
+}
+
+/***********************************************************************
+ * IDSelectorIVFClusterAwareIntersectDirectExp
+ ***********************************************************************/
+
+IDSelectorIVFClusterAwareIntersectDirectExp::IDSelectorIVFClusterAwareIntersectDirectExp(const int32_t* in_cluster_positions, const int32_t * limits, int32_t nprobes, idx_t size_tmp) :  in_cluster_positions(in_cluster_positions), limits(limits), nprobes(nprobes){
+    tmp = new int32_t [size_tmp];
+};
+
+void IDSelectorIVFClusterAwareIntersectDirectExp::set_words(int32_t w1_l, int32_t w2_l) {
+    //printf("set words %ld,  %ld\n", w1, w2);
+    w1 = w1_l * nprobes;
+    if ( w2_l >= 0 ) {
+       w2 = w2_l * nprobes;
+    } else {
+        w2 = -1;
+    }
+}
+
+
+bool IDSelectorIVFClusterAwareIntersectDirectExp::is_member(idx_t id) const  {
+    // we are not using this method for this
+    return  false;
+}
+
+
+bool IDSelectorIVFClusterAwareIntersectDirectExp::set_list(idx_t list_no) const{
+
+    int32_t ids_pos_start = limits[w1 + list_no];
+    int32_t ids_pos_end = limits[w1 + list_no + 1];
+    if ( ids_pos_start >=0 && ids_pos_end >=0 && ids_pos_end > ids_pos_start ) {
+
+        if (w2 < 0) {
+                //printf("found cluster of size %d\n", ids_pos_end - ids_pos_start );
+                this->range = this->in_cluster_positions + ids_pos_start;
+                this->range_size = ids_pos_end - ids_pos_start;
+                return true;
+        } else {
+
+                int32_t ids_pos_start_2 = limits[w2 + list_no];
+                int32_t ids_pos_end_2 = limits[w2 + list_no + 1];
+
+                if ( ids_pos_start_2 >=0 && ids_pos_end_2 >=0 && ids_pos_end_2 > ids_pos_start_2 ) {
 
                     size_t size_intersection =  SIMDintersection(
                             reinterpret_cast<const uint32_t*>(
@@ -423,24 +519,29 @@ void IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
 
                     this->range = this->tmp;
                     this->range_size = size_intersection;
-                    //printf("found size of intersection %d\n",size_intersection);
+
+                    return size_intersection > 0;
 
                 } else {
                     this->range = nullptr;
                     this->range_size = 0;
-                    return;
+                    return false;
                 }
         }
     } else {
         this->range = nullptr;
         this->range_size = 0;
-        return;
+        return false;
     }
 }
 
 
 
-
+//void IDSelectorMyStats::reset() {
+//    memset((void*)this, 0, sizeof(*this));
+//}
+//
+//IDSelectorMyStats IDSelectorMy_Stats;
 
 
 } // namespace faiss

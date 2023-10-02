@@ -97,8 +97,8 @@ void IndexRefine::search(
         float* distances,
         idx_t* labels,
         const SearchParameters* params) const {
-    FAISS_THROW_IF_NOT_MSG(
-            !params, "search params not supported for this index");
+    //FAISS_THROW_IF_NOT_MSG(
+    //       !params, "search params not supported for this index");
     FAISS_THROW_IF_NOT(k > 0);
     FAISS_THROW_IF_NOT(is_trained);
     idx_t k_base = idx_t(k * k_factor);
@@ -114,7 +114,7 @@ void IndexRefine::search(
         del2.set(base_distances);
     }
 
-    base_index->search(n, x, k_base, base_distances, base_labels);
+    base_index->search(n, x, k_base, base_distances, base_labels, params);
 
     for (int i = 0; i < n * k_base; i++)
         assert(base_labels[i] >= -1 && base_labels[i] < ntotal);

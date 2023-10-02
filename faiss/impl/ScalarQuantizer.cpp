@@ -28,6 +28,12 @@
 
 namespace faiss {
 
+uint64_t get_my_cy2() {
+    uint32_t high, low;
+    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | (low);
+}
+
 /*******************************************************************
  * ScalarQuantizer implementation
  *
@@ -1327,10 +1333,13 @@ struct IVFSQScannerL2 : InvertedListScanner {
             float* simi,
             idx_t* idxi,
             size_t k) const override {
+
+        uint64_t start_scan_codes = get_my_cy2();
+
         size_t nup = 0;
 
         const IDSelector* selLocal = this->sel ? this->sel : nullptr;
-        auto* ivf_sel = dynamic_cast<const IDSelectorIVFClusterAwareIntersectDirect*>(selLocal);
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVFDirect*>(selLocal);
 
         if (ivf_sel) {
             //printf("running with direct entries\n");
@@ -1365,6 +1374,10 @@ struct IVFSQScannerL2 : InvertedListScanner {
                 nup++;
             }
         }
+
+        uint64_t end_scan_codes = get_my_cy2();
+        //IDSelectorMy_Stats.scan_codes += end_scan_codes - start_scan_codes;
+
         return nup;
     }
 

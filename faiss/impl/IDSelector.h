@@ -172,7 +172,7 @@ struct IDSelectorXOr : IDSelector {
 
 struct IDSelectorIVF : IDSelector {
     // initialize the selector for the specified list
-    virtual void set_list(idx_t list_no) const {};
+    virtual bool set_list(idx_t list_no) const { return true;};
 
 };
 
@@ -186,8 +186,9 @@ struct IDSelectorIVFSingle : IDSelectorIVF {
     IDSelectorIVFSingle(size_t n, const int32_t* ids);
 
     // initialize the selector for the specified list
-    void set_list(idx_t list_no) const  override {
+    bool set_list(idx_t list_no) const  override {
         offset = 0;
+        return true;
     };
 
     bool is_member(idx_t id) const override;
@@ -209,7 +210,7 @@ struct IDSelectorIVFTwo : IDSelectorIVF {
     void set_words(int32_t w1, int32_t w2=-1);
 
     // initialize the selector for the specified list
-    void set_list(idx_t list_no) const override;
+    bool set_list(idx_t list_no) const override;
 
     bool is_member(idx_t id) const override;
 
@@ -244,7 +245,7 @@ struct IDSelectorIVFClusterAware : IDSelectorIVF {
     void set_words(int32_t w1, int32_t w2=-1);
 
     // initialize the selector for the specified list
-    void set_list(idx_t list_no) const override;
+    bool set_list(idx_t list_no) const override;
 
     bool is_member(idx_t id) const override;
 
@@ -262,8 +263,6 @@ struct IDSelectorIVFClusterAwareIntersect : IDSelectorIVF {
 
     int32_t* tmp;
 
-
-
     int32_t limit_w1_low = -1;
     int32_t limit_w1_high = -1;
     int32_t limit_w2_low = -1;
@@ -274,12 +273,12 @@ struct IDSelectorIVFClusterAwareIntersect : IDSelectorIVF {
     mutable IDSelectorIVFSingle* sel = nullptr;
 
 
-    IDSelectorIVFClusterAwareIntersect(const int32_t* ids, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits);
+    IDSelectorIVFClusterAwareIntersect(const int32_t* ids, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits, idx_t size_tmp);
 
     void set_words(int32_t w1, int32_t w2=-1);
 
     // initialize the selector for the specified list
-    void set_list(idx_t list_no) const override;
+    bool set_list(idx_t list_no) const override;
 
     bool is_member(idx_t id) const override;
 
@@ -290,7 +289,13 @@ struct IDSelectorIVFClusterAwareIntersect : IDSelectorIVF {
     };
 };
 
-struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVF {
+
+struct IDSelectorIVFDirect : IDSelectorIVF {
+    virtual int32_t get_size() const { return 0;};
+    virtual const int32_t* get_range() const { return nullptr;};
+};
+
+struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVFDirect {
 
     // the siZe if ids and cluster_ids is the same
     // the ids are ordered in such a way that for a given word the cluster are in order
@@ -311,20 +316,20 @@ struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVF {
     int32_t limit_w2_high = -1;
 
 
-    int32_t get_size() const{
+    int32_t get_size() const override{
         return range_size;
     }
 
-    const int32_t* get_range() const{
+    const int32_t* get_range() const override{
         return range;
     }
 
-    IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits);
+    IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits, idx_t size_tmp);
 
     void set_words(int32_t w1, int32_t w2=-1);
 
     // initialize the selector for the specified list
-    void set_list(idx_t list_no) const override;
+    bool set_list(idx_t list_no) const override;
 
     bool is_member(idx_t id) const override;
 
@@ -333,6 +338,72 @@ struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVF {
         delete(tmp);
     };
 };
+
+
+
+
+
+struct IDSelectorIVFClusterAwareIntersectDirectExp : IDSelectorIVFDirect {
+
+
+    const int32_t  nprobes;
+    const int32_t* in_cluster_positions;
+    const int32_t * limits;
+
+    int32_t* tmp;
+
+    mutable const int32_t* range;
+    mutable int32_t range_size;
+
+
+    int32_t w1 = -1 ;
+    int32_t w2 = -1;
+
+
+    int32_t get_size() const override{
+        return range_size;
+    }
+
+    const int32_t* get_range() const override {
+        return range;
+    }
+
+    IDSelectorIVFClusterAwareIntersectDirectExp(const int32_t* in_cluster_positions,const int32_t * limits,  int32_t nprobe, idx_t size_tmp);
+
+    void set_words(int32_t w1, int32_t w2=-1) ;
+
+    // initialize the selector for the specified list
+    bool set_list(idx_t list_no) const override;
+
+    bool is_member(idx_t id) const override;
+
+    ~IDSelectorIVFClusterAwareIntersectDirectExp(
+            ) override {
+        delete(tmp);
+    };
+};
+
+
+
+//struct IDSelectorMyStats {
+//    uint64_t intersection;
+//    uint64_t find_cluster;
+//    uint64_t set_list_time;
+//    uint64_t scan_codes;
+//
+//
+//    IDSelectorMyStats() {
+//        reset();
+//    }
+//    void reset();
+//
+//
+//
+//
+//};
+//
+//
+//FAISS_API extern IDSelectorMyStats IDSelectorMy_Stats;
 
 
 

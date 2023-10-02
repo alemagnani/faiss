@@ -24,6 +24,7 @@ BlockInvertedLists::BlockInvertedLists(
           block_size(block_size) {
     ids.resize(nlist);
     codes.resize(nlist);
+    printf("starting block inverted 2\n");
 }
 
 BlockInvertedLists::BlockInvertedLists(size_t nlist, const CodePacker* packer)
@@ -33,6 +34,7 @@ BlockInvertedLists::BlockInvertedLists(size_t nlist, const CodePacker* packer)
           packer(packer) {
     ids.resize(nlist);
     codes.resize(nlist);
+    printf("starting block inverted\n");
 }
 
 BlockInvertedLists::BlockInvertedLists()
@@ -46,6 +48,7 @@ size_t BlockInvertedLists::add_entries(
     if (n_entry == 0) {
         return 0;
     }
+    printf("packing insize the block code %ld ==================================================================================================================================================\n", list_no);
     FAISS_THROW_IF_NOT(list_no < nlist);
     size_t o = ids[list_no].size();
     ids[list_no].resize(o + n_entry);

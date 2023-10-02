@@ -22,6 +22,8 @@ size_t SIMDintersection(const uint32_t *set1, const size_t length1,
                         const uint32_t *set2, const size_t length2,
                         uint32_t *out);
 
+
+
 size_t scalar(const uint32_t *set1, const size_t length1,
                         const uint32_t *set2, const size_t length2,
                         uint32_t *out);

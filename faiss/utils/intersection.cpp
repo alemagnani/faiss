@@ -109,6 +109,8 @@ size_t v1
     const uint32_t *matchOrig = matchOut;
     if (lenFreq == 0 || lenRare == 0) return 0;
 
+
+
     const uint64_t kFreqSpace = 2 * 4 * (0 + 1) - 1;
     const uint64_t kRareSpace = 0;
 
@@ -454,6 +456,8 @@ FINISH_SCALAR: return (out - initout) + scalar(freq,
 }
 
 #else
+
+/**
 
 /**
  * Intersections scheme designed by N. Kurz that works very
@@ -961,6 +965,7 @@ FINISH_SCALAR:
 
 
 #endif
+
 
 /**
  * Our main heuristic.

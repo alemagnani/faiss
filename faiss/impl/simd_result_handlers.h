@@ -13,7 +13,7 @@
 
 #include <faiss/utils/Heap.h>
 #include <faiss/utils/simdlib.h>
-
+#include <faiss/impl/IDSelector.h>
 #include <faiss/impl/platform_macros.h>
 #include <faiss/utils/AlignedTable.h>
 #include <faiss/utils/partitioning.h>
@@ -99,6 +99,8 @@ struct SIMDResultHandler {
     using TI = typename C::TI;
 
     bool disable = false;
+
+    const IDSelectorIVF* sel= nullptr ;
 
     int64_t i0 = 0; // query origin
     int64_t j0 = 0; // db origin
@@ -222,9 +224,15 @@ struct SingleResultHandler : SIMDResultHandler<C, with_id_map> {
             int j = __builtin_ctz(lt_mask);
             lt_mask -= 1 << j;
             T dis = d32tab[j];
+
+            int64_t idx = this->adjust_id(b, j);
+            if (this->sel && !this->sel->is_member(idx)) {
+                continue;
+            }
+
             if (C::cmp(res.val, dis)) {
                 res.val = dis;
-                res.id = this->adjust_id(b, j);
+                res.id = idx;
             }
         }
     }
@@ -307,6 +315,10 @@ struct HeapHandler : SIMDResultHandler<C, with_id_map> {
             T dis = d32tab[j];
             if (C::cmp(heap_dis[0], dis)) {
                 int64_t idx = this->adjust_id(b, j);
+
+                if (this->sel && !this->sel->is_member(idx)) {
+                    continue;
+                }
                 heap_pop<C>(k, heap_dis, heap_ids);
                 heap_push<C>(k, heap_dis, heap_ids, dis, idx);
             }
@@ -428,6 +440,8 @@ struct ReservoirHandler : SIMDResultHandler<C, with_id_map> {
     std::vector<TI> all_ids;
     AlignedTable<T> all_vals;
 
+    //IDSelector* sel;
+
     std::vector<ReservoirTopN<C>> reservoirs;
 
     uint64_t times[4];
@@ -472,7 +486,12 @@ struct ReservoirHandler : SIMDResultHandler<C, with_id_map> {
             int j = __builtin_ctz(lt_mask);
             lt_mask -= 1 << j;
             T dis = d32tab[j];
-            res.add(dis, this->adjust_id(b, j));
+
+            int64_t idx = this->adjust_id(b, j);
+            if (this->sel && !this->sel->is_member(idx)) {
+                continue;
+            }
+            res.add(dis, idx);
         }
         times[1] += get_cy() - t1;
     }

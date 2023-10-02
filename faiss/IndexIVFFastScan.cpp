@@ -162,6 +162,7 @@ void IndexIVFFastScan::add_with_ids(
         AlignedTable<uint8_t> list_codes((i1 - i0) * code_size);
         size_t list_size = bil->list_size(list_no);
 
+        //printf("resizing %ld list for size %ld\n", list_no, list_size +i1 -i0);
         bil->resize(list_no, list_size + i1 - i0);
 
         for (idx_t i = i0; i < i1; i++) {
@@ -308,15 +309,18 @@ void IndexIVFFastScan::search(
         float* distances,
         idx_t* labels,
         const SearchParameters* params) const {
-    FAISS_THROW_IF_NOT_MSG(
-            !params, "search params not supported for this index");
+    //FAISS_THROW_IF_NOT_MSG(
+     //       !params, "search params not supported for this index");
+
+
+
     FAISS_THROW_IF_NOT(k > 0);
 
     DummyScaler scaler;
     if (metric_type == METRIC_L2) {
-        search_dispatch_implem<true>(n, x, k, distances, labels, scaler);
+        search_dispatch_implem<true>(n, x, k, distances, labels, scaler, params);
     } else {
-        search_dispatch_implem<false>(n, x, k, distances, labels, scaler);
+        search_dispatch_implem<false>(n, x, k, distances, labels, scaler, params);
     }
 }
 
@@ -336,7 +340,8 @@ void IndexIVFFastScan::search_dispatch_implem(
         idx_t k,
         float* distances,
         idx_t* labels,
-        const Scaler& scaler) const {
+        const Scaler& scaler,
+        const SearchParameters* params) const {
     using Cfloat = typename std::conditional<
             is_max,
             CMax<float, int64_t>,
@@ -384,7 +389,7 @@ void IndexIVFFastScan::search_dispatch_implem(
                         impl,
                         &ndis,
                         &nlist_visited,
-                        scaler);
+                        scaler, params);
             } else if (impl == 14 || impl == 15) {
                 search_implem_14<C>(n, x, k, distances, labels, impl, scaler);
             } else {
@@ -441,7 +446,7 @@ void IndexIVFFastScan::search_dispatch_implem(
                                 impl,
                                 &ndis,
                                 &nlist_visited,
-                                scaler);
+                                scaler, params);
                     } else {
                         search_implem_10<C>(
                                 i1 - i0,
@@ -760,11 +765,15 @@ void IndexIVFFastScan::search_implem_12(
         int impl,
         size_t* ndis_out,
         size_t* nlist_out,
-        const Scaler& scaler) const {
+        const Scaler& scaler,
+        const SearchParameters* params) const {
     if (n == 0) { // does not work well with reservoir
         return;
     }
     FAISS_THROW_IF_NOT(bbs == 32);
+
+    IDSelector* sel = params ? params->sel : nullptr;
+    auto* ivf_sel = dynamic_cast<const IDSelectorIVF*>(sel);
 
     std::unique_ptr<idx_t[]> coarse_ids(new idx_t[n * nprobe]);
     std::unique_ptr<float[]> coarse_dis(new float[n * nprobe]);
@@ -865,6 +874,16 @@ void IndexIVFFastScan::search_implem_12(
         }
 
         size_t list_size = invlists->list_size(list_no);
+        if (ivf_sel) {
+            //printf("settting list_no in fast scan------------------------------------------------------------------------------------------------------------------ %d\n",list_no);
+            if ( !ivf_sel->set_list(list_no)){
+                i0 = i1;
+                //printf("skipping\n");
+                continue;
+            }
+            //printf("not skipping\n");
+        }
+
 
         if (list_size == 0) {
             i0 = i1;
@@ -903,6 +922,7 @@ void IndexIVFFastScan::search_implem_12(
         handler->ntotal = list_size;
         handler->q_map = q_map.data();
         handler->id_map = ids.get();
+        handler->sel = ivf_sel;
         uint64_t tt1 = get_cy();
 
 #define DISPATCH(classHC)                                                  \
@@ -1281,7 +1301,8 @@ template void IndexIVFFastScan::search_dispatch_implem<true, NormTableScaler>(
         idx_t k,
         float* distances,
         idx_t* labels,
-        const NormTableScaler& scaler) const;
+        const NormTableScaler& scaler,
+        const SearchParameters* params) const;
 
 template void IndexIVFFastScan::search_dispatch_implem<false, NormTableScaler>(
         idx_t n,
@@ -1289,6 +1310,7 @@ template void IndexIVFFastScan::search_dispatch_implem<false, NormTableScaler>(
         idx_t k,
         float* distances,
         idx_t* labels,
-        const NormTableScaler& scaler) const;
+        const NormTableScaler& scaler,
+        const SearchParameters* params) const;
 
 } // namespace faiss

@@ -50,6 +50,7 @@ struct IndexIVFFastScan : IndexIVF {
     int qbs = 0;
     size_t qbs2 = 0;
 
+
     IndexIVFFastScan(
             Index* quantizer,
             size_t d,
@@ -122,7 +123,8 @@ struct IndexIVFFastScan : IndexIVF {
             idx_t k,
             float* distances,
             idx_t* labels,
-            const Scaler& scaler) const;
+            const Scaler& scaler,
+            const SearchParameters* params = nullptr) const;
 
     template <class C, class Scaler>
     void search_implem_1(
@@ -166,7 +168,8 @@ struct IndexIVFFastScan : IndexIVF {
             int impl,
             size_t* ndis_out,
             size_t* nlist_out,
-            const Scaler& scaler) const;
+            const Scaler& scaler,
+            const SearchParameters* params = nullptr) const;
 
     // implem 14 is multithreaded internally across nprobes and queries
     template <class C, class Scaler>
