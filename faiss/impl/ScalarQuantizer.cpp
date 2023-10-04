@@ -28,11 +28,11 @@
 
 namespace faiss {
 
-uint64_t get_my_cy2() {
-    uint32_t high, low;
-    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
-    return ((uint64_t)high << 32) | (low);
-}
+//uint64_t get_my_cy2() {
+//    uint32_t high, low;
+//    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
+//    return ((uint64_t)high << 32) | (low);
+//}
 
 /*******************************************************************
  * ScalarQuantizer implementation
@@ -1334,7 +1334,7 @@ struct IVFSQScannerL2 : InvertedListScanner {
             idx_t* idxi,
             size_t k) const override {
 
-        uint64_t start_scan_codes = get_my_cy2();
+        //uint64_t start_scan_codes = get_my_cy2();
 
         size_t nup = 0;
 
@@ -1375,7 +1375,7 @@ struct IVFSQScannerL2 : InvertedListScanner {
             }
         }
 
-        uint64_t end_scan_codes = get_my_cy2();
+        //uint64_t end_scan_codes = get_my_cy2();
         //IDSelectorMy_Stats.scan_codes += end_scan_codes - start_scan_codes;
 
         return nup;

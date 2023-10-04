@@ -402,6 +402,8 @@ bool IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
     //uint64_t start = get_my_cy();
     int32_t cluster_pos;
 
+    //printf("settingn correctly\n");
+
     bool found_cluster_w = find_cluster(limit_w1_high-limit_w1_low, clusters + limit_w1_low, list_no, cluster_pos );
     //uint64_t end_find_cluster = get_my_cy();
     //IDSelectorMy_Stats.find_cluster += end_find_cluster - start;
@@ -445,6 +447,8 @@ bool IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
                     this->range = this->tmp;
                     this->range_size = size_intersection;
                     //printf("found size of intersection %d\n",size_intersection);
+                    //uint64_t end = get_my_cy();
+                    //IDSelectorMy_Stats.set_list_time += end - start;
                     return size_intersection > 0;
 
                 } else {
@@ -458,7 +462,7 @@ bool IDSelectorIVFClusterAwareIntersectDirect::set_list(idx_t list_no) const{
     } else {
         this->range = nullptr;
         this->range_size = 0;
-        //uint64_t end = get_my_cy();
+        ///uint64_t end = get_my_cy();
         //IDSelectorMy_Stats.set_list_time += end - start;
         return false;
     }
@@ -537,11 +541,11 @@ bool IDSelectorIVFClusterAwareIntersectDirectExp::set_list(idx_t list_no) const{
 
 
 
-//void IDSelectorMyStats::reset() {
-//    memset((void*)this, 0, sizeof(*this));
-//}
-//
-//IDSelectorMyStats IDSelectorMy_Stats;
+void IDSelectorMyStats::reset() {
+    memset((void*)this, 0, sizeof(*this));
+}
+
+IDSelectorMyStats IDSelectorMy_Stats;
 
 
 } // namespace faiss

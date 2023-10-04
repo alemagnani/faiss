@@ -30,6 +30,13 @@
 
 namespace faiss {
 
+//uint64_t get_my_cy4() {
+//    uint32_t high, low;
+//    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
+//    return ((uint64_t)high << 32) | (low);
+//}
+
+
 using ScopedIds = InvertedLists::ScopedIds;
 using ScopedCodes = InvertedLists::ScopedCodes;
 
@@ -500,6 +507,9 @@ void IndexIVF::search_preassigned(
                 // not enough centroids for multiprobe
                 return (size_t)0;
             }
+
+            //uint64_t start_scan_codes = get_my_cy4();
+
             FAISS_THROW_IF_NOT_FMT(
                     key < (idx_t)nlist,
                     "Invalid key=%" PRId64 " nlist=%zd\n",
@@ -511,7 +521,11 @@ void IndexIVF::search_preassigned(
                 return (size_t)0;
             }
 
+
+
             scanner->set_list(key, coarse_dis_i);
+
+
 
             nlistv++;
 
@@ -538,6 +552,9 @@ void IndexIVF::search_preassigned(
                     std::unique_ptr<InvertedLists::ScopedIds> sids;
                     const idx_t* ids = nullptr;
 
+
+
+
                     if (!store_pairs) {
                         sids.reset(new InvertedLists::ScopedIds(invlists, key));
                         ids = sids->get();
@@ -556,9 +573,18 @@ void IndexIVF::search_preassigned(
                         ids += jmin;
                     }
 
+
+
                     size_t scanned = scanner->scan_codes(
                             list_size, codes, ids, simi, idxi, k);
                     nheap += scanned;
+
+
+
+
+                    //uint64_t end_scan_codes = get_my_cy4();
+                    //IDSelectorMy_Stats.one_list += end_scan_codes - start_scan_codes;
+
                     return scanned;
                 }
             } catch (const std::exception& e) {
@@ -598,7 +624,9 @@ void IndexIVF::search_preassigned(
                             simi,
                             idxi,
                             max_codes - nscan);
+                    //printf(" scanning %ld out of max %ld\n",nscan, max_codes);
                     if (nscan >= max_codes) {
+                        //printf("reached max code after scanning %ld out of max %ld\n",nscan, max_codes);
                         break;
                     }
                 }

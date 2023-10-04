@@ -170,6 +170,7 @@ void IndexIVFFastScan::add_with_ids(
             idx_t id = xids ? xids[order[i]] : ntotal + order[i];
             dm_adder.add(order[i], list_no, ofs);
             bil->ids[list_no][ofs] = id;
+
             memcpy(list_codes.data() + (i - i0) * code_size,
                    flat_codes.data() + order[i] * code_size,
                    code_size);
@@ -774,6 +775,7 @@ void IndexIVFFastScan::search_implem_12(
 
     IDSelector* sel = params ? params->sel : nullptr;
     auto* ivf_sel = dynamic_cast<const IDSelectorIVF*>(sel);
+    auto* ivf_sel_direct = dynamic_cast<const IDSelectorIVFDirect*>(sel);
 
     std::unique_ptr<idx_t[]> coarse_ids(new idx_t[n * nprobe]);
     std::unique_ptr<float[]> coarse_dis(new float[n * nprobe]);
@@ -875,13 +877,57 @@ void IndexIVFFastScan::search_implem_12(
 
         size_t list_size = invlists->list_size(list_no);
         if (ivf_sel) {
-            //printf("settting list_no in fast scan------------------------------------------------------------------------------------------------------------------ %d\n",list_no);
             if ( !ivf_sel->set_list(list_no)){
                 i0 = i1;
-                //printf("skipping\n");
                 continue;
             }
-            //printf("not skipping\n");
+        }
+
+
+        const uint8_t* codes_submit;
+
+        AlignedTable<uint8_t> list_codes_filter;
+        AlignedTable<idx_t> list_ids_filter;
+
+        if (ivf_sel_direct) {
+            // we need to copy the data in packed form
+            int32_t size = ivf_sel_direct->get_size();
+
+            list_codes_filter.resize( (size + 32) * code_size);
+            memset(list_codes_filter.data(),
+                   0,
+                   (size + 32) * code_size);
+            list_ids_filter.resize(size);
+            AlignedTable<uint8_t> list_codes(size * code_size);
+
+
+            InvertedLists::ScopedCodes codes(invlists, list_no);
+            InvertedLists::ScopedIds ids(invlists, list_no);
+            const int32_t* range = ivf_sel_direct->get_range();
+            //printf("copying %d entries from %ld  for list no %d \n", size, list_size, list_no);
+            for (idx_t i = 0; i < size; i++) {
+                size_t offset = range[i];
+                //printf("got position %ld\n", offset);
+                BitstringWriter bsw(list_codes.data() + i * code_size, code_size);
+                for (size_t m = 0; m < M; m++) {
+                        uint8_t c =
+                                pq4_get_packed_element(codes.get(), bbs, M2, offset, m);
+                        bsw.write(c, nbits);
+                }
+                list_ids_filter.data()[i] = ids.get()[offset];
+            }
+            pq4_pack_codes_range(
+                    list_codes.data(),
+                    M,
+                    0,
+                    size,
+                    bbs,
+                    M2,
+                    list_codes_filter.data());
+
+            handler->id_map = list_ids_filter.get();
+            codes_submit = list_codes_filter.get();
+            list_size = size;
         }
 
 
@@ -911,25 +957,28 @@ void IndexIVFFastScan::search_implem_12(
                 qbs, M2, dis_tables.get(), lut_entries.data(), LUT.get());
 
         // access the inverted list
-
         ndis += (i1 - i0) * list_size;
 
-        InvertedLists::ScopedCodes codes(invlists, list_no);
-        InvertedLists::ScopedIds ids(invlists, list_no);
-
         // prepare the handler
+        if ( !ivf_sel_direct) {
+            InvertedLists::ScopedCodes codes(invlists, list_no);
+            InvertedLists::ScopedIds ids(invlists, list_no);
+            handler->id_map = ids.get();
+            handler->sel = ivf_sel;
+            codes_submit = codes.get();
+        }
+
 
         handler->ntotal = list_size;
         handler->q_map = q_map.data();
-        handler->id_map = ids.get();
-        handler->sel = ivf_sel;
+
         uint64_t tt1 = get_cy();
 
 #define DISPATCH(classHC)                                                  \
     if (dynamic_cast<classHC*>(handler.get())) {                           \
         auto* res = static_cast<classHC*>(handler.get());                  \
         pq4_accumulate_loop_qbs(                                           \
-                qbs, list_size, M2, codes.get(), LUT.get(), *res, scaler); \
+                qbs, list_size, M2, codes_submit, LUT.get(), *res, scaler); \
     }
         DISPATCH(HeapHC)
         else DISPATCH(ReservoirHC) else DISPATCH(SingleResultHC)
@@ -965,6 +1014,7 @@ void IndexIVFFastScan::search_implem_12(
 
     *ndis_out = ndis;
     *nlist_out = nlist;
+    //printf("done\n");
 }
 
 template <class C, class Scaler>

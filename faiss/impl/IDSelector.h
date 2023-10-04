@@ -385,25 +385,28 @@ struct IDSelectorIVFClusterAwareIntersectDirectExp : IDSelectorIVFDirect {
 
 
 
-//struct IDSelectorMyStats {
-//    uint64_t intersection;
-//    uint64_t find_cluster;
-//    uint64_t set_list_time;
-//    uint64_t scan_codes;
-//
-//
-//    IDSelectorMyStats() {
-//        reset();
-//    }
-//    void reset();
-//
-//
-//
-//
-//};
-//
-//
-//FAISS_API extern IDSelectorMyStats IDSelectorMy_Stats;
+struct IDSelectorMyStats {
+    uint64_t intersection;
+    uint64_t find_cluster;
+    uint64_t set_list_time;
+    uint64_t  one_list;
+    uint64_t scan_codes;
+    uint64_t extra;
+
+
+
+    IDSelectorMyStats() {
+        reset();
+    }
+    void reset();
+
+
+
+
+};
+
+
+FAISS_API extern IDSelectorMyStats IDSelectorMy_Stats;
 
 
 

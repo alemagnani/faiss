@@ -37,6 +37,13 @@
 
 namespace faiss {
 
+
+//uint64_t get_my_cy3() {
+//    uint32_t high, low;
+//    asm volatile("rdtsc \n\t" : "=a"(low), "=d"(high));
+//    return ((uint64_t)high << 32) | (low);
+//}
+
 /*****************************************
  * IndexIVFPQ implementation
  ******************************************/
@@ -52,7 +59,7 @@ IndexIVFPQ::IndexIVFPQ(
     code_size = pq.code_size;
     invlists->code_size = code_size;
     is_trained = false;
-    by_residual = true;
+    by_residual = false;
     use_precomputed_table = 0;
     scan_table_threshold = 0;
 
@@ -584,6 +591,7 @@ struct QueryTables {
         uint64_t t0;
         TIC;
         if (by_residual) {
+            printf("using by residuals\n");
             if (metric_type == METRIC_INNER_PRODUCT)
                 dis0 = precompute_list_tables_IP();
             else
@@ -770,10 +778,11 @@ struct KnnSearchResults {
     }
 
     inline void add(idx_t j, float dis) {
+        nup++;
         if (C::cmp(heap_sim[0], dis)) {
             idx_t id = ids ? ids[j] : lo_build(key, j);
             heap_replace_top<C>(k, heap_sim, heap_ids, dis, id);
-            nup++;
+            //nup++;
         }
     }
 };
@@ -821,12 +830,15 @@ struct IVFPQScannerT : QueryTables {
     void init_list(idx_t list_no, float coarse_dis, int mode) {
         this->key = list_no;
         this->coarse_dis = coarse_dis;
-
+        //uint64_t start_after_filter = get_my_cy3();
         if (mode == 2) {
             dis0 = precompute_list_tables();
         } else if (mode == 1) {
             dis0 = precompute_list_table_pointers();
         }
+
+        //uint64_t end_after_filter = get_my_cy3();
+        //IDSelectorMy_Stats.extra += end_after_filter - start_after_filter;
     }
 
     /*****************************************************
@@ -862,47 +874,89 @@ struct IVFPQScannerT : QueryTables {
     void scan_list_with_table(
             size_t ncode,
             const uint8_t* codes,
-            SearchResultType& res) const {
+            SearchResultType& res, const IDSelectorIVFDirect* sel) const {
         int counter = 0;
 
+
         size_t saved_j[4] = {0, 0, 0, 0};
-        for (size_t j = 0; j < ncode; j++) {
-            if (res.skip_entry(j)) {
-                continue;
+        if ( sel ) {
+
+            int32_t size = sel->get_size();
+            //printf("running in the selection loop size is %d insted of %ld\n", size, ncode);
+            const int32_t* range = sel->get_range();
+            for (size_t pos = 0; pos < size; pos++) {
+                size_t j = range[pos];
+
+                saved_j[0] = (counter == 0) ? j : saved_j[0];
+                saved_j[1] = (counter == 1) ? j : saved_j[1];
+                saved_j[2] = (counter == 2) ? j : saved_j[2];
+                saved_j[3] = (counter == 3) ? j : saved_j[3];
+
+                counter += 1;
+                if (counter == 4) {
+                    float distance_0 = 0;
+                    float distance_1 = 0;
+                    float distance_2 = 0;
+                    float distance_3 = 0;
+                    distance_four_codes<PQDecoder>(
+                            pq.M,
+                            pq.nbits,
+                            sim_table,
+                            codes + saved_j[0] * pq.code_size,
+                            codes + saved_j[1] * pq.code_size,
+                            codes + saved_j[2] * pq.code_size,
+                            codes + saved_j[3] * pq.code_size,
+                            distance_0,
+                            distance_1,
+                            distance_2,
+                            distance_3);
+
+                    res.add(saved_j[0], dis0 + distance_0);
+                    res.add(saved_j[1], dis0 + distance_1);
+                    res.add(saved_j[2], dis0 + distance_2);
+                    res.add(saved_j[3], dis0 + distance_3);
+                    counter = 0;
+                }
             }
 
-            saved_j[0] = (counter == 0) ? j : saved_j[0];
-            saved_j[1] = (counter == 1) ? j : saved_j[1];
-            saved_j[2] = (counter == 2) ? j : saved_j[2];
-            saved_j[3] = (counter == 3) ? j : saved_j[3];
+        } else {
+            for (size_t j = 0; j < ncode; j++) {
+                if (res.skip_entry(j)) {
+                    continue;
+                }
 
-            counter += 1;
-            if (counter == 4) {
-                float distance_0 = 0;
-                float distance_1 = 0;
-                float distance_2 = 0;
-                float distance_3 = 0;
-                distance_four_codes<PQDecoder>(
-                        pq.M,
-                        pq.nbits,
-                        sim_table,
-                        codes + saved_j[0] * pq.code_size,
-                        codes + saved_j[1] * pq.code_size,
-                        codes + saved_j[2] * pq.code_size,
-                        codes + saved_j[3] * pq.code_size,
-                        distance_0,
-                        distance_1,
-                        distance_2,
-                        distance_3);
+                saved_j[0] = (counter == 0) ? j : saved_j[0];
+                saved_j[1] = (counter == 1) ? j : saved_j[1];
+                saved_j[2] = (counter == 2) ? j : saved_j[2];
+                saved_j[3] = (counter == 3) ? j : saved_j[3];
 
-                res.add(saved_j[0], dis0 + distance_0);
-                res.add(saved_j[1], dis0 + distance_1);
-                res.add(saved_j[2], dis0 + distance_2);
-                res.add(saved_j[3], dis0 + distance_3);
-                counter = 0;
+                counter += 1;
+                if (counter == 4) {
+                    float distance_0 = 0;
+                    float distance_1 = 0;
+                    float distance_2 = 0;
+                    float distance_3 = 0;
+                    distance_four_codes<PQDecoder>(
+                            pq.M,
+                            pq.nbits,
+                            sim_table,
+                            codes + saved_j[0] * pq.code_size,
+                            codes + saved_j[1] * pq.code_size,
+                            codes + saved_j[2] * pq.code_size,
+                            codes + saved_j[3] * pq.code_size,
+                            distance_0,
+                            distance_1,
+                            distance_2,
+                            distance_3);
+
+                    res.add(saved_j[0], dis0 + distance_0);
+                    res.add(saved_j[1], dis0 + distance_1);
+                    res.add(saved_j[2], dis0 + distance_2);
+                    res.add(saved_j[3], dis0 + distance_3);
+                    counter = 0;
+                }
             }
         }
-
         if (counter >= 1) {
             float dis = dis0 +
                     distance_single_code<PQDecoder>(
@@ -1209,6 +1263,12 @@ struct IVFPQScanner : IVFPQScannerT<idx_t, METRIC_TYPE, PQDecoder>,
     void set_list(idx_t list_no, float coarse_dis) override {
         this->list_no = list_no;
         this->init_list(list_no, coarse_dis, precompute_mode);
+
+        const IDSelector* selLocal = this->sel ? this->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVF*>(selLocal);
+        if (ivf_sel) {
+            ivf_sel->set_list(list_no);
+        }
     }
 
     float distance_to_code(const uint8_t* code) const override {
@@ -1226,6 +1286,9 @@ struct IVFPQScanner : IVFPQScannerT<idx_t, METRIC_TYPE, PQDecoder>,
             float* heap_sim,
             idx_t* heap_ids,
             size_t k) const override {
+
+        //uint64_t start_scan_codes = get_my_cy3();
+
         KnnSearchResults<C, use_sel> res = {
                 /* key */ this->key,
                 /* ids */ this->store_pairs ? nullptr : ids,
@@ -1234,12 +1297,14 @@ struct IVFPQScanner : IVFPQScannerT<idx_t, METRIC_TYPE, PQDecoder>,
                 /* heap_sim */ heap_sim,
                 /* heap_ids */ heap_ids,
                 /* nup */ 0};
+        const IDSelector* selLocal = this->sel ? this->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVFDirect*>(selLocal);
 
         if (this->polysemous_ht > 0) {
             assert(precompute_mode == 2);
             this->scan_list_polysemous(ncode, codes, res);
         } else if (precompute_mode == 2) {
-            this->scan_list_with_table(ncode, codes, res);
+            this->scan_list_with_table(ncode, codes, res, ivf_sel);
         } else if (precompute_mode == 1) {
             this->scan_list_with_pointer(ncode, codes, res);
         } else if (precompute_mode == 0) {
@@ -1247,6 +1312,10 @@ struct IVFPQScanner : IVFPQScannerT<idx_t, METRIC_TYPE, PQDecoder>,
         } else {
             FAISS_THROW_MSG("bad precomp mode");
         }
+
+        //uint64_t end_scan_codes = get_my_cy3();
+        //IDSelectorMy_Stats.scan_codes += end_scan_codes - start_scan_codes;
+
         return res.nup;
     }
 
@@ -1267,7 +1336,7 @@ struct IVFPQScanner : IVFPQScannerT<idx_t, METRIC_TYPE, PQDecoder>,
             assert(precompute_mode == 2);
             this->scan_list_polysemous(ncode, codes, res);
         } else if (precompute_mode == 2) {
-            this->scan_list_with_table(ncode, codes, res);
+            this->scan_list_with_table(ncode, codes, res, nullptr);
         } else if (precompute_mode == 1) {
             this->scan_list_with_pointer(ncode, codes, res);
         } else if (precompute_mode == 0) {

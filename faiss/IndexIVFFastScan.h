@@ -50,7 +50,6 @@ struct IndexIVFFastScan : IndexIVF {
     int qbs = 0;
     size_t qbs2 = 0;
 
-
     IndexIVFFastScan(
             Index* quantizer,
             size_t d,
