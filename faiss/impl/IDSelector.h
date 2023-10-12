@@ -406,7 +406,7 @@ struct IDSelectorMyStats {
 };
 
 
-FAISS_API extern IDSelectorMyStats IDSelectorMy_Stats;
+//FAISS_API extern IDSelectorMyStats IDSelectorMy_Stats;
 
 
 

@@ -215,7 +215,7 @@ void IDSelectorIVFClusterAware::set_words(int32_t w1, int32_t w2) {
     }
 }
 
-bool find_cluster(const int32_t n, const int16_t* array, const int_fast16_t list_no, int32_t  &found_pos) {
+inline bool find_cluster(const int32_t n, const int16_t* array, const int_fast16_t list_no, int32_t  &found_pos) {
 
     if (n == 0 || array[0] > list_no || array[n-1] < list_no ) {
         return false;
@@ -545,7 +545,7 @@ void IDSelectorMyStats::reset() {
     memset((void*)this, 0, sizeof(*this));
 }
 
-IDSelectorMyStats IDSelectorMy_Stats;
+//IDSelectorMyStats IDSelectorMy_Stats;
 
 
 } // namespace faiss
