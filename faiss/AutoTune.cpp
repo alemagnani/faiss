@@ -502,6 +502,13 @@ void ParameterSpace::set_index_parameter(
         }
     }
 
+    if (name == "selector_probe_limit") {
+        if (DC(IndexIVF)) {
+            ix->selector_probe_limit = int(val);
+            return;
+        }
+    }
+
     if (name == "ht") {
         if (DC(IndexPQ)) {
             if (val >= ix->pq.code_size * 8) {

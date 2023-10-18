@@ -208,6 +208,7 @@ void IndexShardsIVF::search(
                 k,
                 Iq.data(),
                 Dq.data(),
+                0,
                 all_distances.data() + no * k * n,
                 all_labels.data() + no * k * n,
                 false);

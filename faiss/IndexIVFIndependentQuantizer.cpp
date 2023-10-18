@@ -96,7 +96,7 @@ void IndexIVFIndependentQuantizer::search(
     VTransformedVectors tv(vt, n, x);
 
     index_ivf->search_preassigned(
-            n, tv.x, k, I.data(), D.data(), distances, labels, false);
+            n, tv.x, k, I.data(), D.data(), 0, distances, labels, false);
 }
 
 void IndexIVFIndependentQuantizer::reset() {

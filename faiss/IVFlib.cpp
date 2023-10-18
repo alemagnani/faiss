@@ -151,7 +151,7 @@ void search_and_return_centroids(
     }
 
     index_ivf->search_preassigned(
-            n, x, k, cent_nos.data(), cent_dis.data(), distances, labels, true);
+            n, x, k, cent_nos.data(), cent_dis.data(), 0, distances, labels, true);
 
     for (size_t i = 0; i < n * k; i++) {
         idx_t label = labels[i];
@@ -355,7 +355,7 @@ void search_with_parameters(
     double t2 = getmillisecs();
 
     index_ivf->search_preassigned(
-            n, x, k, Iq.data(), Dq.data(), distances, labels, false, params);
+            n, x, k, Iq.data(), Dq.data(), 0, distances, labels, false, params);
     double t3 = getmillisecs();
 
     if (ms_per_stage) {

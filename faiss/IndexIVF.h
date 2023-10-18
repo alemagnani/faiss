@@ -72,6 +72,7 @@ struct SearchParametersIVF : SearchParameters {
     size_t nprobe = 1;    ///< number of probes at query time
     size_t max_codes = 0; ///< max nb of codes to visit to do a query
     SearchParameters* quantizer_params = nullptr;
+    size_t selector_probe_limit = 0; // the number of probes from the selector under which we won't be running the internal coarse quantizer
 
     virtual ~SearchParametersIVF() {}
 };
@@ -86,7 +87,8 @@ struct CodePacker;
 struct IndexIVFInterface : Level1Quantizer {
     size_t nprobe = 1;    ///< number of probes at query time
     size_t max_codes = 0; ///< max nb of codes to visit to do a query
-
+    size_t selector_probe_limit =0;
+    
     explicit IndexIVFInterface(Index* quantizer = nullptr, size_t nlist = 0)
             : Level1Quantizer(quantizer, nlist) {}
 
@@ -115,6 +117,7 @@ struct IndexIVFInterface : Level1Quantizer {
             idx_t k,
             const idx_t* assign,
             const float* centroid_dis,
+            idx_t np,
             float* distances,
             idx_t* labels,
             bool store_pairs,
@@ -273,6 +276,7 @@ struct IndexIVF : Index, IndexIVFInterface {
             idx_t k,
             const idx_t* assign,
             const float* centroid_dis,
+            idx_t np,
             float* distances,
             idx_t* labels,
             bool store_pairs,

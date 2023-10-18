@@ -77,6 +77,7 @@ struct IndexIVFFlatDedup : IndexIVFFlat {
             idx_t k,
             const idx_t* assign,
             const float* centroid_dis,
+            idx_t np,
             float* distances,
             idx_t* labels,
             bool store_pairs,

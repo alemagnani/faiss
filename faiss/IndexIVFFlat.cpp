@@ -353,6 +353,7 @@ void IndexIVFFlatDedup::search_preassigned(
         idx_t k,
         const idx_t* assign,
         const float* centroid_dis,
+        idx_t np,
         float* distances,
         idx_t* labels,
         bool store_pairs,
@@ -362,7 +363,7 @@ void IndexIVFFlatDedup::search_preassigned(
             !store_pairs, "store_pairs not supported in IVFDedup");
 
     IndexIVFFlat::search_preassigned(
-            n, x, k, assign, centroid_dis, distances, labels, false, params);
+            n, x, k, assign, centroid_dis, 0, distances, labels, false, params);
 
     std::vector<idx_t> labels2(k);
     std::vector<float> dis2(k);

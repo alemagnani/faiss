@@ -293,6 +293,8 @@ struct IDSelectorIVFClusterAwareIntersect : IDSelectorIVF {
 struct IDSelectorIVFDirect : IDSelectorIVF {
     virtual int32_t get_size() const { return 0;};
     virtual const int32_t* get_range() const { return nullptr;};
+    virtual int32_t get_num_clusters() const { return 0;};
+    virtual void get_clusters(idx_t* destination) const {};
 };
 
 struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVFDirect {
@@ -309,6 +311,8 @@ struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVFDirect {
     mutable const int32_t* range;
     mutable int32_t range_size;
 
+    mutable bool is_first_smallest_cluster;
+
 
     int32_t limit_w1_low = -1;
     int32_t limit_w1_high = -1;
@@ -323,6 +327,33 @@ struct IDSelectorIVFClusterAwareIntersectDirect : IDSelectorIVFDirect {
     const int32_t* get_range() const override{
         return range;
     }
+
+    int32_t get_num_clusters() const override {
+        int32_t out = limit_w1_high-limit_w1_low;
+        if (limit_w2_low < 0) {
+            is_first_smallest_cluster = true;
+            return out;
+        }
+        int32_t second = limit_w2_high-limit_w2_low ;
+        if (out < second) {
+            is_first_smallest_cluster = true;
+            return out;
+        }
+        is_first_smallest_cluster = false;
+        return second;
+    }
+    void get_clusters(idx_t* destination) const override {
+        if (is_first_smallest_cluster){
+            for (int i =0; i < limit_w1_high-limit_w1_low; i++) {
+                destination[i] =  clusters[limit_w1_low + i];
+            }
+        } else {
+            for (int i =0; i < limit_w2_high-limit_w2_low; i++) {
+                destination[i] =  clusters[limit_w2_low + i];
+            }
+        }
+    }
+
 
     IDSelectorIVFClusterAwareIntersectDirect(const int32_t* in_cluster_positions, const int32_t* limits, const int16_t* clusters, const int32_t* cluster_limits, idx_t size_tmp);
 

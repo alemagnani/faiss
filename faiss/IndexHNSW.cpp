@@ -1026,6 +1026,7 @@ void IndexHNSW2Level::search(
                 k,
                 coarse_assign.get(),
                 coarse_dis.get(),
+                0,
                 distances,
                 labels,
                 false);

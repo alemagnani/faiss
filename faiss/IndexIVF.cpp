@@ -319,17 +319,35 @@ void IndexIVF::search(
         std::unique_ptr<idx_t[]> idx(new idx_t[n * nprobe]);
         std::unique_ptr<float[]> coarse_dis(new float[n * nprobe]);
 
+        size_t nprobe_local = nprobe;
+        size_t nprobe_sel = 0;
+
         double t0 = getmillisecs();
-        quantizer->search(
-                n,
-                x,
-                nprobe,
-                coarse_dis.get(),
-                idx.get(),
-                params ? params->quantizer_params : nullptr);
+
+        IDSelector* selLocal = params ? params->sel : nullptr;
+        auto* ivf_sel = dynamic_cast<const IDSelectorIVFDirect*>(selLocal);
+
+        if (ivf_sel) {
+            nprobe_sel = ivf_sel->get_num_clusters();
+        }
+        //printf("prob limit %ld\n", params->selector_probe_limit);
+        if (ivf_sel && nprobe >= nprobe_sel  && nprobe_sel <= params->selector_probe_limit) {
+            //printf("skipping the coarse quantizer %ld\n",  nprobe_sel);
+            // this way we avoid the search of the coarse quantizer and we reduce the  clusters and hopeully improve recall
+            nprobe_local = nprobe_sel;
+            ivf_sel->get_clusters(idx.get());
+        } else {
+            quantizer->search(
+                    n,
+                    x,
+                    nprobe,
+                    coarse_dis.get(),
+                    idx.get(),
+                    params ? params->quantizer_params : nullptr);
+        }
 
         double t1 = getmillisecs();
-        invlists->prefetch_lists(idx.get(), n * nprobe);
+        invlists->prefetch_lists(idx.get(), n * nprobe_local);
 
         search_preassigned(
                 n,
@@ -337,6 +355,7 @@ void IndexIVF::search(
                 k,
                 idx.get(),
                 coarse_dis.get(),
+                nprobe_local,
                 distances,
                 labels,
                 false,
@@ -394,6 +413,7 @@ void IndexIVF::search_preassigned(
         idx_t k,
         const idx_t* keys,
         const float* coarse_dis,
+        idx_t nprobe,
         float* distances,
         idx_t* labels,
         bool store_pairs,
@@ -401,8 +421,8 @@ void IndexIVF::search_preassigned(
         IndexIVFStats* ivf_stats) const {
     FAISS_THROW_IF_NOT(k > 0);
 
-    idx_t nprobe = params ? params->nprobe : this->nprobe;
-    nprobe = std::min((idx_t)nlist, nprobe);
+    //idx_t nprobe = params ? params->nprobe : this->nprobe;
+    //nprobe = std::min((idx_t)nlist, nprobe);
     FAISS_THROW_IF_NOT(nprobe > 0);
 
     const idx_t unlimited_list_size = std::numeric_limits<idx_t>::max();
@@ -1019,6 +1039,7 @@ void IndexIVF::search_and_reconstruct(
             k,
             idx,
             coarse_dis,
+            nprobe,
             distances,
             labels,
             true /* store_pairs */,
