@@ -331,8 +331,8 @@ void IndexIVF::search(
             nprobe_sel = ivf_sel->get_num_clusters();
         }
         //printf("prob limit %ld\n", params->selector_probe_limit);
-        if (ivf_sel && nprobe >= nprobe_sel  && nprobe_sel <= params->selector_probe_limit) {
-            //printf("skipping the coarse quantizer %ld\n",  nprobe_sel);
+        if (ivf_sel && nprobe >= nprobe_sel  && nprobe_sel < params->selector_probe_limit) {
+            //printf("skipping the coarse quantizer %ld, limit %ld\n",  nprobe_sel, params->selector_probe_limit);
             // this way we avoid the search of the coarse quantizer and we reduce the  clusters and hopeully improve recall
             nprobe_local = nprobe_sel;
             ivf_sel->get_clusters(idx.get());
